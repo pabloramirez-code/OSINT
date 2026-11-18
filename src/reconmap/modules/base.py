@@ -127,6 +127,11 @@ class Context:
                 return None
             if response.status_code >= 500 and not last_attempt:
                 continue
+            if response.status_code in {401, 403}:
+                raise ModuleError(
+                    f"Acceso denegado (HTTP {response.status_code}): "
+                    "clave inválida o el plan no permite esta consulta"
+                )
             if response.is_error:
                 raise ModuleError(f"La fuente respondió HTTP {response.status_code}")
             return response

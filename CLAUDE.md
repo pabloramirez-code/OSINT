@@ -604,7 +604,6 @@ uv run mypy src
   - Revisión manual de la Fase 2.
   - Fixture real del Wayback (el Archive estaba caído); los tests usan el
     formato CDX documentado.
-  - Fixture real de Shodan: necesita la clave del usuario.
 - Notas:
   - `normalize_domain` devuelve `Domain(name, wildcard)` (NamedTuple).
   - IDNA con el códec estándar de Python (IDNA 2003), sin dependencia extra.
@@ -636,3 +635,7 @@ uv run mypy src
   - `.env` se lee con un parser propio (sin dependencia nueva) solo en
     `reconmap-web` y en el CLI; los tests nunca cargan claves reales.
   - InternetDB y Shodan omiten IPv6.
+  - Shodan con clave gratuita: algunas IPs devuelven 403 "Requires membership
+    or higher to access" (restricción del plan, no fallo). Se muestra como
+    "Acceso denegado… el plan no permite esta consulta". InternetDB cubre los
+    mismos puertos sin clave. Ritmo de Shodan: 1 petición cada 2 s.

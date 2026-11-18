@@ -4,6 +4,7 @@ from pydantic import BaseModel, ValidationError
 
 from reconmap.models import Contact, Entity, EntityType, ModuleResult, Relation, RelationType
 from reconmap.modules.base import Context, ModuleError
+from reconmap.modules.internetdb import in_scope_hostnames
 
 
 class ShodanHost(BaseModel):
@@ -24,7 +25,7 @@ class Shodan:
     contact = Contact.PASSIVE
     requires_key: str | None = "SHODAN_API_KEY"
     cache_ttl = timedelta(hours=24)
-    rate_limit = 1.0
+    rate_limit = 0.5
 
     async def run(self, entity: Entity, ctx: Context) -> ModuleResult:
         if ":" in entity.value:
@@ -35,10 +36,10 @@ class Shodan:
             secret_params={"key": ctx.key(self)},
             allow_not_found=True,
         )
-        return parse_shodan(entity.value, data)
+        return parse_shodan(entity.value, ctx.target, data)
 
 
-def parse_shodan(ip: str, data: object) -> ModuleResult:
+def parse_shodan(ip: str, target: str, data: object) -> ModuleResult:
     if data is None:
         return ModuleResult()
     try:
@@ -55,10 +56,20 @@ def parse_shodan(ip: str, data: object) -> ModuleResult:
         Entity(type=EntityType.PORT, value=f"{ip}:{port}", attributes={"port": port})
         for port in sorted(host.ports)
     ]
+    subdomains = [
+        Entity(type=EntityType.SUBDOMAIN, value=name)
+        for name in in_scope_hostnames(host.hostnames, target)
+    ]
     return ModuleResult(
-        entities=[address, *ports],
+        entities=[address, *ports, *subdomains],
         relations=[
-            Relation(from_ref=address.ref, type=RelationType.EXPOSES_PORT, to_ref=port.ref)
-            for port in ports
+            *(
+                Relation(from_ref=address.ref, type=RelationType.EXPOSES_PORT, to_ref=port.ref)
+                for port in ports
+            ),
+            *(
+                Relation(from_ref=sub.ref, type=RelationType.RESOLVES_TO, to_ref=address.ref)
+                for sub in subdomains
+            ),
         ],
     )

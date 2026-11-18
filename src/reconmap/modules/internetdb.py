@@ -62,7 +62,7 @@ def parse_internetdb(ip: str, target: str, data: object) -> ModuleResult:
         relations.append(
             Relation(from_ref=address.ref, type=RelationType.EXPOSES_PORT, to_ref=exposed.ref)
         )
-    for hostname in _in_scope_hostnames(host.hostnames, target):
+    for hostname in in_scope_hostnames(host.hostnames, target):
         sub = Entity(type=EntityType.SUBDOMAIN, value=hostname)
         entities.append(sub)
         relations.append(
@@ -71,7 +71,7 @@ def parse_internetdb(ip: str, target: str, data: object) -> ModuleResult:
     return ModuleResult(entities=entities, relations=relations)
 
 
-def _in_scope_hostnames(hostnames: list[str], target: str) -> list[str]:
+def in_scope_hostnames(hostnames: list[str], target: str) -> list[str]:
     """Los nombres ajenos se quedan como atributo de la IP: nunca se convierten en entidades."""
     names = []
     for hostname in hostnames:

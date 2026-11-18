@@ -9,7 +9,7 @@ from reconmap.models import Entity, EntityType, RelationType
 from reconmap.modules.base import Context, ModuleError
 from reconmap.modules.bgp import Bgp
 from reconmap.modules.internetdb import InternetDb, parse_internetdb
-from reconmap.modules.shodan import Shodan
+from reconmap.modules.shodan import Shodan, parse_shodan
 from reconmap.store import Store
 from tests.conftest import load_fixture
 
@@ -107,3 +107,47 @@ async def test_api_key_is_sent_but_never_cached(store: Store) -> None:
     conn: sqlite3.Connection = store._conn
     dump = json.dumps([tuple(row) for row in conn.execute("SELECT * FROM cache")])
     assert "s3cr3t" not in dump
+
+
+def test_shodan_real_fixture() -> None:
+    result = parse_shodan(IP.value, "example.com", load_fixture("shodan_104.20.23.154.json"))
+    ports = {e.value for e in result.entities if e.type is EntityType.PORT}
+    assert len(ports) == 13 and "104.20.23.154:443" in ports
+    shodan = result.entities[0].attributes["shodan"]
+    assert isinstance(shodan, dict) and shodan["org"] == "Cloudflare, Inc."
+    assert not [e for e in result.entities if e.type is EntityType.SUBDOMAIN]
+
+
+def test_shodan_in_scope_hostname_becomes_subdomain() -> None:
+    data = {"ports": [], "hostnames": ["mail.example.com", "other.org"]}
+    result = parse_shodan(IP.value, "example.com", data)
+    assert [e.value for e in result.entities if e.type is EntityType.SUBDOMAIN] == [
+        "mail.example.com"
+    ]
+
+
+@respx.mock
+async def test_shodan_404_means_no_data(store: Store) -> None:
+    respx.get(url__startswith="https://api.shodan.io/shodan/host/").respond(404)
+    async with httpx.AsyncClient() as http:
+        from reconmap.ratelimit import RateLimiter
+
+        ctx = Context(
+            http, store.cache, RateLimiter(), target="example.com", keys={"SHODAN_API_KEY": "x"}
+        )
+        assert (await Shodan().run(IP, ctx)).entities == []
+
+
+@respx.mock
+async def test_plan_restriction_has_clear_message(store: Store) -> None:
+    respx.get(url__startswith="https://api.shodan.io/shodan/host/").respond(
+        403, json={"error": "Requires membership or higher to access"}
+    )
+    async with httpx.AsyncClient() as http:
+        from reconmap.ratelimit import RateLimiter
+
+        ctx = Context(
+            http, store.cache, RateLimiter(), target="example.com", keys={"SHODAN_API_KEY": "x"}
+        )
+        with pytest.raises(ModuleError, match="plan no permite"):
+            await Shodan().run(IP, ctx)
