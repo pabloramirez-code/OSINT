@@ -45,7 +45,9 @@ vectores de ataque. **Observa y marca.**
    correlacionan datos personales. Si una fuente devuelve emails, se guarda solo
    el recuento por dominio. De los índices de filtraciones o buckets **nunca**
    se guardan nombres ni contenidos de archivos; solo el nombre del bucket, el
-   proveedor y el número de archivos.
+   proveedor y el número de archivos. **Excepción aprobada por el usuario
+   (2026-11-18):** las URLs del Wayback Machine se guardan completas, con su
+   query string.
 3. **Ámbito controlado.** La recursión solo sigue el dominio objetivo y sus
    subdominios. IPs y ASNs se registran pero **no** se usan para saltar a otros
    dominios. Los resultados obtenidos por **búsqueda por palabra clave** (no por
@@ -367,13 +369,17 @@ Tareas:
 - [ ] `modules/wayback.py`: CDX API
       `http://web.archive.org/cdx/search/cdx?url=*.{dominio}/*&output=json&fl=original&collapse=urlkey`
       con límite configurable.
-- [ ] `modules/bgp.py`: IP → ASN → organización (RIPEstat o BGPView).
+- [ ] `modules/bgp.py`: IP → ASN → organización con RIPEstat (`network-info`
+      y `as-overview`). BGPView descartado: no responde (nov. 2026).
 - [ ] `modules/shodan.py`: consulta por IP con `SHODAN_API_KEY` (sin
       búsquedas por `hostname:`, que gastan créditos). Sin clave: no se ejecuta.
 - [ ] `modules/certspotter.py` y `modules/hackertarget.py`: subdominios
       (comprobar condiciones y guardar fixture real antes).
 - [ ] `scope.py`: `in_scope(entity, target)`.
 - [ ] Motor v2: cola con `max_depth` (1 por defecto, máximo 3) y visitadas.
+      La profundidad cuenta saltos entre nombres de dominio; las IPs se
+      procesan a la profundidad del host que las resolvió. Tope de 300
+      subdominios por escaneo (`RECONMAP_MAX_HOSTS`), avisado en la interfaz.
 - [ ] Interfaz: selector de profundidad; pestaña **IPs y puertos**; las
       barras de progreso aparecen para los módulos nuevos sin tocar plantillas
       (se generan desde la lista de módulos).
@@ -587,11 +593,16 @@ uv run mypy src
 
 ## 9. Estado actual
 
-- Fase actual: **1 — MVP** (implementada; pendiente de revisión manual).
-- Última tarea completada: Fase 1 completa (1A núcleo + 1B interfaz + CLI).
-  56 tests sin red, ruff y mypy en verde. Tests `-m network`: RDAP y DNS OK;
-  crt.sh devolvió 502 en una ejecución (inestabilidad conocida de crt.sh).
-- Pendiente de revisión manual: checklist de la Fase 0 ✔; checklist de la Fase 1.
+- Fase actual: **2 — Más fuentes y recursión** (implementada; pendiente de revisión manual).
+- Fase 1 cerrada y etiquetada `v0.1.0`.
+- Última tarea completada: Fase 2 completa. 86 tests sin red, ruff y mypy en
+  verde. Tests `-m network`: 6/8 (fallaron crt.sh por error de red puntual y
+  Wayback por caída del Internet Archive, 503 "Temporarily Offline").
+- Pendiente:
+  - Revisión manual de la Fase 2.
+  - Fixture real del Wayback (el Archive estaba caído); los tests usan el
+    formato CDX documentado.
+  - Fixture real de Shodan: necesita la clave del usuario.
 - Notas:
   - `normalize_domain` devuelve `Domain(name, wildcard)` (NamedTuple).
   - IDNA con el códec estándar de Python (IDNA 2003), sin dependencia extra.
@@ -613,3 +624,13 @@ uv run mypy src
     marcar cabeceras ausentes o inseguras según OWASP Secure Headers.
   - Aviso pendiente: Starlette sugiere `httpx2` para TestClient (no está en el
     stack; no se ha añadido).
+  - Fase 2: la profundidad cuenta saltos entre nombres; las IPs se procesan a
+    la profundidad del host que las resolvió. Tope `RECONMAP_MAX_HOSTS` (300).
+  - NXDOMAIN en un subdominio se guarda como `nxdomain: true`, no como error
+    (crt.sh trae muchos nombres antiguos); en el dominio raíz sí es error.
+  - Las claves de API van en `secret_params`/`secret_headers`: nunca en la
+    clave de caché ni en mensajes de error. Los errores inesperados se
+    registran sin traceback por el mismo motivo.
+  - `.env` se lee con un parser propio (sin dependencia nueva) solo en
+    `reconmap-web` y en el CLI; los tests nunca cargan claves reales.
+  - InternetDB y Shodan omiten IPv6.
