@@ -3,6 +3,7 @@ la interfaz los pinta con textContent, nunca como HTML."""
 
 import json
 
+from reconmap.insights import ScanIndex, short_label
 from reconmap.models import Entity, EntityType, Relation
 from reconmap.store import Store
 
@@ -14,7 +15,7 @@ GROUP_LABELS = {
     EntityType.PORT: "puertos",
 }
 MAX_DETAIL_LENGTH = 300
-MAX_SHORT_LABEL = 30
+TYPE_RANK = {t: i for i, t in enumerate(EntityType)}
 
 
 def node_id(entity_type: str, value: str) -> str:
@@ -22,17 +23,23 @@ def node_id(entity_type: str, value: str) -> str:
 
 
 def build_graph(store: Store, scan_id: str, max_nodes: int = MAX_NODES) -> dict[str, object]:
-    entities = store.entities(scan_id)
+    entities = sorted(
+        store.entities(scan_id), key=lambda e: (e.first_seen, TYPE_RANK[e.type], e.value)
+    )
     relations = store.relations(scan_id)
     grouped = _types_to_group(entities, max_nodes)
+    index = ScanIndex(store, scan_id)
 
     nodes: dict[str, dict[str, object]] = {}
     for entity in entities:
         if entity.type in grouped:
             continue
-        nodes[node_id(entity.type, entity.value)] = _node(entity)
+        nid = node_id(entity.type, entity.value)
+        insights = index.insights(nid)
+        nodes[nid] = {**_node(entity), "worst": insights.worst if insights else None}
     for entity_type in grouped:
-        count = sum(e.type is entity_type for e in entities)
+        members = [e for e in entities if e.type is entity_type]
+        count = len(members)
         nodes[_group_id(entity_type)] = {
             "id": _group_id(entity_type),
             "type": entity_type,
@@ -41,7 +48,12 @@ def build_graph(store: Store, scan_id: str, max_nodes: int = MAX_NODES) -> dict[
             "group": True,
             "sources": [],
             "details": {"Agrupados": f"{count} nodos de tipo {entity_type}"},
+            "seen": members[0].first_seen.isoformat(),
+            "worst": None,
         }
+    ordered = sorted(nodes.values(), key=lambda n: str(n["seen"]))
+    for position, node in enumerate(ordered):
+        node["order"] = position
 
     edges: dict[str, dict[str, object]] = {}
     for relation in relations:
@@ -50,7 +62,7 @@ def build_graph(store: Store, scan_id: str, max_nodes: int = MAX_NODES) -> dict[
             edges[str(edge["id"])] = edge
 
     return {
-        "nodes": list(nodes.values()),
+        "nodes": ordered,
         "edges": list(edges.values()),
         "grouped": [str(t) for t in grouped],
     }
@@ -83,18 +95,8 @@ def _node(entity: Entity) -> dict[str, object]:
         "group": False,
         "sources": sorted(entity.sources),
         "details": {key: _as_text(value) for key, value in sorted(entity.attributes.items())},
+        "seen": entity.first_seen.isoformat(),
     }
-
-
-def short_label(entity: Entity) -> str:
-    """Etiqueta corta para el canvas; el valor completo se ve en el panel lateral."""
-    if entity.type is EntityType.PORT:
-        text = entity.value.rsplit(":", 1)[-1]
-    elif entity.type is EntityType.CERTIFICATE:
-        text = f"cert. {str(entity.attributes.get('not_after', ''))[:10]}".strip()
-    else:
-        text = entity.value
-    return text if len(text) <= MAX_SHORT_LABEL else text[: MAX_SHORT_LABEL - 1] + "…"
 
 
 def _edge(relation: Relation, grouped: list[EntityType]) -> dict[str, object] | None:

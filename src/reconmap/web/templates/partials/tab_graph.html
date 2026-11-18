@@ -2,15 +2,21 @@
 {% set active = "graph" %}
 
 {% block tab %}
-<div class="graph" data-graph-url="/api/scans/{{ scan.id }}/graph">
+<div class="graph" data-graph-url="/api/scans/{{ scan.id }}/graph" data-node-url="/api/scans/{{ scan.id }}/node">
   <div class="graph-toolbar">
     <button type="button" data-action="fit">Reencuadrar</button>
+    <button type="button" data-action="relayout">Redistribuir</button>
     <span class="graph-status muted">Cargando grafo…</span>
+  </div>
+  <div class="graph-timeline">
+    <button type="button" data-action="play">▶ Reproducir</button>
+    <input type="range" min="0" max="1" value="1" data-timeline aria-label="Paso de la construcción del grafo">
+    <span class="timeline-label muted"></span>
   </div>
   <div class="graph-body">
     <div class="graph-canvas" role="img" aria-label="Grafo de la infraestructura del dominio"></div>
     <aside class="graph-panel" aria-live="polite">
-      <p class="muted">Pulsa un nodo para ver sus detalles y resaltar sus conexiones. Rueda para hacer zoom; arrastra para moverte.</p>
+      <p class="muted">Pulsa un nodo para ver sus posibles problemas, su información y lo que tiene relacionado. «Reproducir» muestra cómo se fue construyendo el grafo durante el escaneo.</p>
     </aside>
   </div>
   <ul class="graph-legend"></ul>

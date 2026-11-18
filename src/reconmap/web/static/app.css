@@ -441,7 +441,7 @@ details summary { cursor: pointer; color: var(--accent); }
 .graph-toolbar button { background: var(--surface-2); border-color: var(--border); color: var(--text); }
 .graph-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 340px;
   gap: 12px;
 }
 .graph-canvas {
@@ -468,6 +468,28 @@ details summary { cursor: pointer; color: var(--accent); }
 .graph-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 12px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
 .graph-legend li { display: flex; align-items: center; gap: 6px; }
 .legend-swatch { width: 10px; height: 10px; border-radius: 2px; }
+.legend-note { color: var(--muted); font-style: italic; }
+.graph-timeline { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px; }
+.graph-timeline input[type="range"] { flex: 1 1 240px; padding: 0; accent-color: var(--accent); }
+.graph-timeline button { background: var(--surface-2); border-color: var(--border); color: var(--text); min-width: 130px; }
+.timeline-label { font-size: 13px; min-width: 260px; }
+.graph-panel h4 { margin: 16px 0 6px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.insight-problems, .insight-related { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.insight-problems li { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; font-size: 13px; }
+.insight-problems p { margin: 2px 0 0; font-size: 12px; }
+.insight-related li { display: flex; gap: 6px; align-items: baseline; font-size: 13px; }
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 400;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.link-button:hover { text-decoration: underline; }
 
 @media (max-width: 980px) {
   .graph-body { grid-template-columns: minmax(0, 1fr); }

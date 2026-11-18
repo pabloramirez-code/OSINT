@@ -13,6 +13,7 @@ from starlette.exceptions import HTTPException
 
 from reconmap.config import KNOWN_KEYS, Settings, api_keys, load_env_file
 from reconmap.engine import Engine
+from reconmap.insights import ScanIndex
 from reconmap.models import Scan
 from reconmap.modules import default_modules
 from reconmap.modules.base import Module
@@ -172,6 +173,14 @@ def create_app(
     async def scan_graph(scan_id: str) -> JSONResponse:
         get_scan(scan_id)
         return JSONResponse(build_graph(store, scan_id))
+
+    @app.get("/api/scans/{scan_id}/node")
+    async def scan_node(scan_id: str, id: str) -> JSONResponse:
+        get_scan(scan_id)
+        insights = ScanIndex(store, scan_id).insights(id)
+        if insights is None:
+            raise HTTPException(404, "Ese nodo no existe en el escaneo")
+        return JSONResponse(insights.as_dict())
 
     @app.get("/api/scans/{scan_id}/report")
     async def scan_report(scan_id: str) -> JSONResponse:

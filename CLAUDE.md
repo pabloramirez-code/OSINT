@@ -709,3 +709,13 @@ uv run mypy src
     de proton.me, en `web/static/img/`) y fuentes listadas dinámicamente
     (nuevo atributo `description` en el contrato de módulo). La casilla de
     autorización pasa a ser un selector Pasivo | Ligero.
+  - Grafo (2026-11-18, pedido por el usuario): disposición `cose` más
+    espaciada + botón Redistribuir; reproducción de la construcción en el
+    orden real del escaneo (`first_seen`, desempate por tipo) con barra,
+    Reproducir/Pausa y enlace `#paso=N`; panel por nodo vía
+    `GET /api/scans/{id}/node?id=…` (`insights.py`): posibles problemas
+    (servicios de administración y bases de datos expuestos, CVEs, CDN,
+    certificados caducados o a punto de caducar, rutas sensibles del Wayback,
+    riesgo de correo, cabeceras, caducidad del dominio), información y
+    relacionados navegables; borde rojo/ámbar según el peor problema; enlace
+    `#nodo=<id>`. `insights.py` es la base de las reglas de la Fase 4.
