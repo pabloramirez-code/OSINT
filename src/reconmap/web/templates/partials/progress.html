@@ -24,7 +24,7 @@
     </div>
   {% endfor %}
   {% if not scan.is_active %}
-    <div hx-get="/scans/{{ scan.id }}/tabs/summary" hx-trigger="load" hx-target="#results"></div>
+    <div hx-get="/scans/{{ scan.id }}/tabs/{{ initial_tab or 'summary' }}" hx-trigger="load" hx-target="#results"></div>
   {% endif %}
 </div>
 {% if oob and not scan.is_active %}

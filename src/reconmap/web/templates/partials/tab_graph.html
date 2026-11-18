@@ -1,0 +1,18 @@
+{% extends "partials/tabs.html" %}
+{% set active = "graph" %}
+
+{% block tab %}
+<div class="graph" data-graph-url="/api/scans/{{ scan.id }}/graph">
+  <div class="graph-toolbar">
+    <button type="button" data-action="fit">Reencuadrar</button>
+    <span class="graph-status muted">Cargando grafo…</span>
+  </div>
+  <div class="graph-body">
+    <div class="graph-canvas" role="img" aria-label="Grafo de la infraestructura del dominio"></div>
+    <aside class="graph-panel" aria-live="polite">
+      <p class="muted">Pulsa un nodo para ver sus detalles y resaltar sus conexiones. Rueda para hacer zoom; arrastra para moverte.</p>
+    </aside>
+  </div>
+  <ul class="graph-legend"></ul>
+</div>
+{% endblock %}

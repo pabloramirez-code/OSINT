@@ -487,16 +487,22 @@ Revisión manual:
 está la herramienta frente a otras.
 
 Tareas:
-- [ ] `GET /api/scans/{id}/graph` → `{nodes, edges}`.
-- [ ] Pestaña **Grafo** con Cytoscape.js: color y forma por tipo de entidad,
-      leyenda, zoom, botón "reencuadrar", clic en nodo → panel lateral con
-      detalles y fuentes (rellenado con `textContent`).
-- [ ] Con más de ~300 nodos: agrupar URLs del Wayback en un único nodo
-      "N URLs archivadas" para que el grafo siga siendo legible.
-- [ ] Comparación: ejecutar SpiderFoot (solo pasivo) y
-      `amass enum -passive` sobre el mismo dominio propio;
-      `scripts/compare.py` → solo en reconmap / solo en la otra / en ambas;
-      resultado en `docs/comparativa.md`.
+- [x] `GET /api/scans/{id}/graph` → `{nodes, edges, grouped}` (`report/graph.py`).
+- [x] Pestaña **Grafo** con Cytoscape.js 3.30.2 (cargado solo al abrir la
+      pestaña, con SRI): color y forma por tipo, leyenda, zoom, "Reencuadrar",
+      clic en nodo → panel lateral con `textContent` y resaltado de vecinos.
+      Etiquetas cortas calculadas en el servidor (certificados por caducidad,
+      puertos por número). Enlace directo a pestaña: `/scans/{id}?tab=graph`.
+- [x] Con más de 300 nodos se agrupan tipos en orden URL → certificado →
+      puerto hasta caber ("N URLs archivadas"). Ampliado frente al plan: con
+      datos reales (proton.me: 1000 URLs + 295 certificados) agrupar solo las
+      URLs no bastaba. proton.me: 1290 entidades → 203 nodos.
+- [x] Herramienta de comparación: `reconmap compare informe.json otra.txt
+      --tool amass --markdown docs/comparativa.md` (lista de texto, un nombre por
+      línea, para no depender del formato de cada herramienta).
+- [ ] Ejecutar SpiderFoot (solo pasivo) y `amass enum -passive` sobre un
+      dominio propio y guardar el resultado en `docs/comparativa.md`
+      (pendiente del usuario: requiere instalar esas herramientas).
 - [ ] (Opcional) Primer test E2E con playwright: escanear con fuentes
       simuladas y comprobar que aparece el grafo.
 
@@ -639,8 +645,9 @@ uv run mypy src
 
 ## 9. Estado actual
 
-- Fase actual: **2 — Más fuentes y recursión** y **2c — Correo** (implementadas;
-  pendientes de revisión manual).
+- Fase actual: **3 — Grafo y comparación** (grafo implementado; comparación
+  real con amass/SpiderFoot pendiente). Fases 2, 2b y 2c pendientes de
+  revisión manual.
 - Fase 1 cerrada y etiquetada `v0.1.0`.
 - Última tarea completada: Fase 2 completa. 86 tests sin red, ruff y mypy en
   verde. Tests `-m network`: 6/8 (fallaron crt.sh por error de red puntual y

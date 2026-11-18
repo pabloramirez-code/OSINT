@@ -12,6 +12,7 @@ from reconmap.engine import Engine
 from reconmap.models import EntityType
 from reconmap.modules import default_modules
 from reconmap.normalize import InvalidDomainError, normalize_domain
+from reconmap.report.compare import compare as compare_subdomains
 from reconmap.report.json_report import build_report
 from reconmap.store import Store
 
@@ -70,3 +71,28 @@ def scan(
             json.dumps(build_report(store, scan_id), indent=2, ensure_ascii=False), encoding="utf-8"
         )
         console.print(f"Informe guardado en {json_out}")
+
+
+@app.command()
+def compare(
+    report: Annotated[Path, typer.Argument(help="Informe JSON de reconmap (--json)")],
+    other: Annotated[
+        Path, typer.Argument(help="Subdominios de la otra herramienta, uno por línea")
+    ],
+    tool: Annotated[str, typer.Option(help="Nombre de la otra herramienta")] = "otra herramienta",
+    markdown: Annotated[Path | None, typer.Option(help="Guardar el resultado en Markdown")] = None,
+) -> None:
+    """Compara los subdominios de reconmap con los de otra herramienta (amass, SpiderFoot…)."""
+    result = compare_subdomains(
+        json.loads(report.read_text(encoding="utf-8")),
+        other.read_text(encoding="utf-8", errors="replace"),
+        tool,
+    )
+    table = Table("", "Subdominios")
+    table.add_row("Solo reconmap", str(len(result.only_reconmap)))
+    table.add_row(f"Solo {tool}", str(len(result.only_other)))
+    table.add_row("En ambas", str(len(result.both)))
+    console.print(table)
+    if markdown:
+        markdown.write_text(result.to_markdown(), encoding="utf-8")
+        console.print(f"Comparación guardada en {markdown}")

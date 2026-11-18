@@ -17,12 +17,13 @@ from reconmap.models import Scan
 from reconmap.modules import default_modules
 from reconmap.modules.base import Module
 from reconmap.normalize import InvalidDomainError, normalize_domain
+from reconmap.report.graph import build_graph
 from reconmap.report.json_report import build_report
 from reconmap.store import Store
 from reconmap.web import views
 
 WEB_DIR = Path(__file__).parent
-TABS = {"summary", "subdomains", "ips", "mail", "web", "json"}
+TABS = {"summary", "subdomains", "ips", "graph", "mail", "web", "json"}
 
 templates = Jinja2Templates(
     env=Environment(loader=FileSystemLoader(WEB_DIR / "templates"), autoescape=True)
@@ -131,8 +132,9 @@ def create_app(
         return RedirectResponse(url, status_code=303)
 
     @app.get("/scans/{scan_id}", response_class=HTMLResponse)
-    async def scan_page(request: Request, scan_id: str) -> HTMLResponse:
-        return render(request, "scan.html", {"scan": get_scan(scan_id)})
+    async def scan_page(request: Request, scan_id: str, tab: str = "summary") -> HTMLResponse:
+        context = {"scan": get_scan(scan_id), "initial_tab": tab if tab in TABS else "summary"}
+        return render(request, "scan.html", context)
 
     @app.get("/scans/{scan_id}/progress", response_class=HTMLResponse)
     async def scan_progress(request: Request, scan_id: str) -> HTMLResponse:
@@ -165,6 +167,11 @@ def create_app(
         configured = {name: name in keys for name in KNOWN_KEYS}
         context = {"modules": module_cards(), "configured": configured}
         return render(request, "settings.html", context)
+
+    @app.get("/api/scans/{scan_id}/graph")
+    async def scan_graph(scan_id: str) -> JSONResponse:
+        get_scan(scan_id)
+        return JSONResponse(build_graph(store, scan_id))
 
     @app.get("/api/scans/{scan_id}/report")
     async def scan_report(scan_id: str) -> JSONResponse:
