@@ -420,6 +420,8 @@ Tareas:
 - [ ] `modules/buckets.py` (GrayHatWarfare, `GRAYHAT_API_KEY`): solo el
       endpoint de buckets, buscando la etiqueta principal del dominio. Guarda
       entidades `candidate` (nombre del bucket, proveedor, nº de archivos).
+      Autenticación: cabecera `Authorization: Bearer <token>`; en `.env` se
+      guarda solo el token (sin la palabra `Bearer`) y el módulo la añade.
 - [ ] Pestaña o sección "Candidatos no atribuidos".
 
 Tests que deben pasar:
