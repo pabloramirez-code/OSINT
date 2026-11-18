@@ -1,0 +1,28 @@
+{
+  "mx": [
+    "10 mail.protonmail.ch.",
+    "20 mailsec.protonmail.ch."
+  ],
+  "spf": [
+    "v=spf1 include:_spf.protonmail.ch ~all"
+  ],
+  "spf_lookups": 2,
+  "dmarc": [
+    "v=DMARC1; p=quarantine; fo=1; aspf=s; adkim=s;"
+  ],
+  "dkim": {
+    "protonmail": "v=DKIM1;k=rsa;p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAn46zCm3zHBmS1zePKxA+RIXw41Nu6l91NpLLBnWnrcZ35H/843XNWPZEQ0OgGwx/yqTXETMLXIDjGEWlK1E1mpdguqu+3s7SuIHoo5+i6mgyxJguljkwc3dk8ojnJ6VVUPnDh5GJArkAhXxEb1aOK1BVGM0yDlmYdmaOfd48qcx5iODP/MFc8pivfxEXTIL+aUz7+X69lMiwUSHpWYL3/a5X3nLD0zEntxv08xs8J/rpuRg4v+OXEOhcNvhkeiRZqJBdpJTkoEZfGvdTct+U0YYC69NW0ClUcKio2uDPmxU1xvfvHbSTW2gHYk8RpYZaxLACULdMo+Vt4Na/oIR+swIDAQAB;",
+    "protonmail2": "v=DKIM1;k=rsa;p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzyzKjxw9soyR/PtOaHGV2qeOR63FVUMlRr2ssw6yZQGea4O3DzioVtwQMjXhqkLSnthca9zIyInBEcWXbC2LwRWX0vXJrULQpFtY1anvBebUJgbX9W2TJUW8seVoVVcKk0DF4iENEtsWNPBpuGKdx1BPpN4OujjWFs7RN4oIMHnJpSIlxzX9hT8mwdlUuKA4GsOOBg8zpXQIeJy8jDWj2xrmd6GxGsSCBD4mRrqwscSWU+RN6vyUon8wT2b3HujvCCRUhIrd40tMeT9clyl7IZSTJu5M7q0+s/favDSKiyIMBG4Walzr5OuFMl2eEGwDp45s3jQZfjHlczjCeyjmEwIDAQAB;"
+  },
+  "dkim_selectors_tried": 20,
+  "mta_sts": [
+    "v=STSv1; id=190906205100Z;"
+  ],
+  "tls_rpt": [
+    "v=TLSRPTv1; rua=https://reports.proton.me/reports/smtptls"
+  ],
+  "bimi": [
+    "v=BIMI1; l=; a=;"
+  ],
+  "dnssec": true
+}

@@ -1,0 +1,51 @@
+{% extends "partials/tabs.html" %}
+{% set active = "mail" %}
+{% set status_labels = {"ok": "Correcto", "warn": "Mejorable", "fail": "Problema", "info": "Info"} %}
+
+{% block tab %}
+{% if assessment %}
+  <section class="panel risk-panel risk-{{ assessment.risk }}">
+    <h2>Riesgo de suplantación: {{ assessment.risk|upper }}</h2>
+    {% for reason in assessment.reasons %}<p>{{ reason }}</p>{% endfor %}
+    {% if not assessment.reasons %}<p>DMARC bloquea el correo que suplante a este dominio y a sus subdominios.</p>{% endif %}
+    <details>
+      <summary>¿Cómo se calcula?</summary>
+      <ul>{% for line in criteria %}<li>{{ line }}</li>{% endfor %}</ul>
+    </details>
+  </section>
+
+  <div class="table-wrap">
+    <table class="data-table checks">
+      <thead><tr><th>Control</th><th>Estado</th><th>Detalle</th><th>Recomendación</th></tr></thead>
+      <tbody>
+        {% for check in assessment.checks %}
+          <tr>
+            <td class="nowrap">{{ check.control }}</td>
+            <td class="nowrap"><span class="badge badge-{{ check.status }}">{{ status_labels[check.status] }}</span></td>
+            <td>{{ check.summary }}</td>
+            <td class="muted">{{ check.advice or "—" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <details class="panel raw-records">
+    <summary>Registros DNS consultados</summary>
+    <dl>
+      <dt>SPF</dt><dd>{% for r in records.spf %}<code>{{ r }}</code><br>{% else %}—{% endfor %}</dd>
+      <dt>DMARC</dt><dd>{% for r in records.dmarc %}<code>{{ r }}</code><br>{% else %}—{% endfor %}</dd>
+      <dt>DKIM</dt><dd>{% for selector, r in records.dkim.items() %}<code>{{ selector }}: {{ r|truncate(90) }}</code><br>{% else %}—{% endfor %}</dd>
+      <dt>MX</dt><dd>{% for r in records.mx %}<code>{{ r }}</code><br>{% else %}—{% endfor %}</dd>
+      <dt>MTA-STS</dt><dd>{% for r in records.mta_sts %}<code>{{ r }}</code><br>{% else %}—{% endfor %}</dd>
+      <dt>TLS-RPT</dt><dd>{% for r in records.tls_rpt %}<code>{{ r }}</code><br>{% else %}—{% endfor %}</dd>
+      <dt>BIMI</dt><dd>{% for r in records.bimi %}<code>{{ r }}</code><br>{% else %}—{% endfor %}</dd>
+    </dl>
+  </details>
+  {% if not allow_light %}
+    <p class="muted">La política MTA-STS solo se descarga si marcas «Tengo autorización o es un dominio mío».</p>
+  {% endif %}
+{% else %}
+  <p class="muted">Este escaneo no incluye datos de correo.</p>
+{% endif %}
+{% endblock %}

@@ -22,7 +22,7 @@ from reconmap.store import Store
 from reconmap.web import views
 
 WEB_DIR = Path(__file__).parent
-TABS = {"summary", "subdomains", "ips", "json"}
+TABS = {"summary", "subdomains", "ips", "mail", "json"}
 
 templates = Jinja2Templates(
     env=Environment(loader=FileSystemLoader(WEB_DIR / "templates"), autoescape=True)
@@ -94,6 +94,7 @@ def create_app(
         request: Request,
         domain: Annotated[str, Form()] = "",
         depth: Annotated[str, Form()] = "1",
+        authorized: Annotated[str, Form()] = "",
     ) -> Response:
         try:
             target = normalize_domain(domain).name
@@ -104,7 +105,7 @@ def create_app(
         if store.active_scan() is not None:
             return form_error(request, 429, "Ya hay un escaneo en marcha; espera a que termine")
 
-        scan_id = engine.create_scan(target, depth=int(depth))
+        scan_id = engine.create_scan(target, depth=int(depth), allow_light=authorized == "1")
         task = asyncio.create_task(engine.run(scan_id))
         running.add(task)
         task.add_done_callback(running.discard)
@@ -138,6 +139,8 @@ def create_app(
             return views.subdomains(store, scan)
         if tab == "ips":
             return views.ips(store, scan)
+        if tab == "mail":
+            return views.mail(store, scan)
         return {}
 
     @app.get("/settings", response_class=HTMLResponse)

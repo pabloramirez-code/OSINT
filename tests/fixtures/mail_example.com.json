@@ -1,0 +1,39 @@
+{
+  "mx": [
+    "0 ."
+  ],
+  "spf": [
+    "v=spf1 -all"
+  ],
+  "spf_lookups": 0,
+  "dmarc": [
+    "v=DMARC1;p=reject;sp=reject;adkim=s;aspf=s"
+  ],
+  "dkim": {
+    "google": "v=DKIM1; p=",
+    "selector1": "v=DKIM1; p=",
+    "selector2": "v=DKIM1; p=",
+    "k1": "v=DKIM1; p=",
+    "k2": "v=DKIM1; p=",
+    "k3": "v=DKIM1; p=",
+    "mandrill": "v=DKIM1; p=",
+    "default": "v=DKIM1; p=",
+    "dkim": "v=DKIM1; p=",
+    "mail": "v=DKIM1; p=",
+    "s1": "v=DKIM1; p=",
+    "s2": "v=DKIM1; p=",
+    "smtp": "v=DKIM1; p=",
+    "zmail": "v=DKIM1; p=",
+    "protonmail": "v=DKIM1; p=",
+    "protonmail2": "v=DKIM1; p=",
+    "protonmail3": "v=DKIM1; p=",
+    "fm1": "v=DKIM1; p=",
+    "fm2": "v=DKIM1; p=",
+    "fm3": "v=DKIM1; p="
+  },
+  "dkim_selectors_tried": 20,
+  "mta_sts": [],
+  "tls_rpt": [],
+  "bimi": [],
+  "dnssec": true
+}

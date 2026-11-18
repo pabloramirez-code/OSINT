@@ -75,7 +75,7 @@ class Context:
 
         async def fetch() -> object:
             response = await self._request(
-                module, url, secret_params, secret_headers, allow_not_found
+                module, url, secret_params, secret_headers, allow_not_found, follow_redirects=True
             )
             if response is None:
                 return None
@@ -93,9 +93,12 @@ class Context:
         url: str,
         *,
         secret_params: Mapping[str, str] | None = None,
+        follow_redirects: bool = True,
     ) -> str:
         async def fetch() -> object:
-            response = await self._request(module, url, secret_params, None, False)
+            response = await self._request(
+                module, url, secret_params, None, False, follow_redirects=follow_redirects
+            )
             return response.text if response is not None else ""
 
         text = await self.cached(module, url, fetch)
@@ -108,6 +111,7 @@ class Context:
         params: Mapping[str, str] | None,
         headers: Mapping[str, str] | None,
         allow_not_found: bool,
+        follow_redirects: bool,
         retries: int = 1,
     ) -> httpx.Response | None:
         """Una petición, con un reintento ante 5xx o timeout (crt.sh y Wayback fallan a menudo)."""
@@ -115,7 +119,9 @@ class Context:
             last_attempt = attempt == retries
             await self.throttle(module)
             try:
-                response = await self.http.get(url, params=params, headers=headers)
+                response = await self.http.get(
+                    url, params=params, headers=headers, follow_redirects=follow_redirects
+                )
             except httpx.TimeoutException as exc:
                 if last_attempt:
                     raise ModuleError("Tiempo de espera agotado") from exc
@@ -123,6 +129,8 @@ class Context:
             except httpx.HTTPError as exc:
                 raise ModuleError(f"Error de red ({type(exc).__name__})") from exc
 
+            if response.is_redirect:
+                raise ModuleError("La fuente respondió con una redirección y no se sigue")
             if response.status_code == 404 and allow_not_found:
                 return None
             if response.status_code >= 500 and not last_attempt:

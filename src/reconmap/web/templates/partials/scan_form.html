@@ -12,5 +12,9 @@
       {% for level in (1, 2, 3) %}<option value="{{ level }}">{{ level }}</option>{% endfor %}
     </select>
   </label>
+  <label class="authorize" title="Permite peticiones equivalentes a visitar la web (p. ej. la política MTA-STS)">
+    <input type="checkbox" name="authorized" value="1" {{ "disabled" if busy }}>
+    Tengo autorización o es un dominio mío
+  </label>
   <button type="submit" {{ "disabled" if busy }}>{{ "Escaneando…" if busy else "Escanear" }}</button>
 </form>

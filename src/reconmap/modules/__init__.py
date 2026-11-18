@@ -6,6 +6,8 @@ from reconmap.modules.crtsh import CrtSh
 from reconmap.modules.dns import Dns
 from reconmap.modules.hackertarget import HackerTarget
 from reconmap.modules.internetdb import InternetDb
+from reconmap.modules.mail import Mail
+from reconmap.modules.mta_sts import MtaSts
 from reconmap.modules.rdap import Rdap
 from reconmap.modules.shodan import Shodan
 from reconmap.modules.wayback import Wayback
@@ -19,6 +21,8 @@ def default_modules(settings: Settings | None = None) -> list[Module]:
         HackerTarget(),
         Dns(),
         Rdap(),
+        Mail(),
+        MtaSts(),
         Wayback(limit=settings.wayback_limit),
         InternetDb(),
         Bgp(),

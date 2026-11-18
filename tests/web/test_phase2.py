@@ -62,4 +62,4 @@ def test_ips_tab_shows_asn_ports_and_escapes(client: TestClient, store: Store) -
 def test_summary_warns_when_host_limit_reached(client: TestClient, store: Store) -> None:
     scan = store.create_scan("example.com")
     store.update_scan(scan.id, status=ScanStatus.DONE, host_limit_reached=True)
-    assert "tope de" in client.get(f"/scans/{scan.id}/tabs/summary").text
+    assert "tope de subdominios" in client.get(f"/scans/{scan.id}/tabs/summary").text

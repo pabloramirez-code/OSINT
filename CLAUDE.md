@@ -375,6 +375,8 @@ Tareas:
       búsquedas por `hostname:`, que gastan créditos). Sin clave: no se ejecuta.
 - [ ] `modules/certspotter.py` y `modules/hackertarget.py`: subdominios
       (comprobar condiciones y guardar fixture real antes).
+- [ ] Más adelante (aprobado por el usuario, sin fecha): VirusTotal,
+      AlienVault OTX, urlscan.io, GreyNoise y AbuseIPDB.
 - [ ] `scope.py`: `in_scope(entity, target)`.
 - [ ] Motor v2: cola con `max_depth` (1 por defecto, máximo 3) y visitadas.
       La profundidad cuenta saltos entre nombres de dominio; las IPs se
@@ -405,14 +407,49 @@ Revisión manual:
 
 ---
 
+### Fase 2c — Seguridad del correo (adelantada a petición del usuario)
+
+**Objetivo:** saber si el dominio se puede suplantar por correo y qué falta
+para evitarlo, con criterios explícitos y defendibles.
+
+Tareas:
+- [ ] Casilla "Tengo autorización o es un dominio mío" en el formulario
+      (`allow_light`), adelantada de la Fase 2b.
+- [ ] `modules/mail.py` (`passive`, solo DNS): MX, SPF (con recuento de
+      consultas DNS siguiendo `include`/`redirect`, máx. 10 según RFC 7208),
+      DMARC, DKIM, `_mta-sts`, `_smtp._tls` (TLS-RPT), BIMI y DS (DNSSEC).
+- [ ] DKIM: se prueba una **lista acotada (~20) de selectores habituales**
+      (Google, Microsoft, Mailchimp, Proton, Fastmail…). Excepción explícita a
+      "nada de fuerza bruta": son consultas DNS fijas, no un diccionario.
+      Si no se encuentra, se informa "no encontrado en selectores habituales",
+      nunca "no tiene DKIM".
+- [ ] `modules/mta_sts.py` (`light`): solo si existe `_mta-sts`, descarga
+      `https://mta-sts.<dominio>/.well-known/mta-sts.txt` sin seguir
+      redirecciones.
+- [ ] Evaluación pura (`mail_assessment.py`) con semáforo por control y
+      nivel de riesgo de suplantación ALTO/MEDIO/BAJO con criterios visibles.
+- [ ] Pestaña **Correo** y tarjeta de riesgo en el Resumen.
+
+Tests que deben pasar:
+- [ ] SPF: `+all` → fallo; `-all`/`~all` → correcto; >10 consultas → fallo;
+      dos registros SPF → fallo; bucles de `include` no cuelgan.
+- [ ] DMARC: ausente o `p=none` → riesgo ALTO; `pct<100` → aviso.
+- [ ] DKIM: RSA 1024 → aviso; RSA 2048 y ed25519 → correcto; `p=` vacío →
+      clave revocada.
+- [ ] Dominio que no envía correo (MX nulo + `-all` + DMARC reject) → BAJO.
+- [ ] MTA-STS: sin casilla no hay petición; sin `_mta-sts` no hay petición;
+      una redirección no se sigue.
+- [ ] Los TXT (texto externo) se muestran escapados.
+
+---
+
 ### Fase 2b — Contacto ligero y buckets
 
 **Objetivo:** añadir el nivel `light` y las fuentes que lo necesitan, sin
 romper las reglas 1–3.
 
 Tareas:
-- [ ] Casilla "Tengo autorización o es un dominio mío" en el formulario;
-      se guarda como `allow_light` en el `Scan`.
+- [x] Casilla de autorización: adelantada a la Fase 2c.
 - [ ] `modules/headers.py` (`light`): un GET a `https://{host}/` por host en
       ámbito; guarda cabeceras de seguridad (HSTS, CSP, X-Frame-Options,
       X-Content-Type-Options, Referrer-Policy, Permissions-Policy) y `Server`.
@@ -595,7 +632,8 @@ uv run mypy src
 
 ## 9. Estado actual
 
-- Fase actual: **2 — Más fuentes y recursión** (implementada; pendiente de revisión manual).
+- Fase actual: **2 — Más fuentes y recursión** y **2c — Correo** (implementadas;
+  pendientes de revisión manual).
 - Fase 1 cerrada y etiquetada `v0.1.0`.
 - Última tarea completada: Fase 2 completa. 86 tests sin red, ruff y mypy en
   verde. Tests `-m network`: 6/8 (fallaron crt.sh por error de red puntual y
@@ -639,3 +677,10 @@ uv run mypy src
     or higher to access" (restricción del plan, no fallo). Se muestra como
     "Acceso denegado… el plan no permite esta consulta". InternetDB cubre los
     mismos puertos sin clave. Ritmo de Shodan: 1 petición cada 2 s.
+  - Fase 2c: el riesgo de suplantación (ALTO/MEDIO/BAJO) solo mira DMARC y
+    `+all`; el resto de controles (DKIM, MTA-STS, DNSSEC…) se muestran como
+    semáforo pero no cambian el nivel. Criterios visibles en la interfaz.
+  - Las direcciones `mailto:` de DMARC/TLS-RPT se guardan como `***@dominio`
+    (regla 2). Tamaño de claves DKIM verificado contra `openssl` con claves reales.
+  - El aviso de tope de hosts ya no muestra un número: el tope puede cambiar
+    entre escaneos y el valor guardado no se conserva.

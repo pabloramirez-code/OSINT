@@ -3,6 +3,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 
+from reconmap.mail_assessment import RISK_CRITERIA, MailAssessment, assess
 from reconmap.models import EntityType, RelationType, Scan
 from reconmap.store import Store
 
@@ -40,6 +41,7 @@ def summary(store: Store, scan: Scan, max_hosts: int) -> dict[str, object]:
         "wayback_truncated": root.get("archived_urls_truncated", False),
         "max_hosts": max_hosts,
         "requests": [(run.label, run.requests) for run in scan.progress if run.requests],
+        "mail_risk": _assessment(root).risk if isinstance(root.get("mail"), dict) else None,
     }
 
 
@@ -87,6 +89,28 @@ def ips(store: Store, scan: Scan) -> dict[str, object]:
             )
         )
     return {"rows": rows}
+
+
+def mail(store: Store, scan: Scan) -> dict[str, object]:
+    roots = store.entities(scan.id, EntityType.DOMAIN)
+    root = roots[0].attributes if roots else {}
+    if not isinstance(root.get("mail"), dict):
+        return {"assessment": None}
+    return {
+        "assessment": _assessment(root),
+        "criteria": RISK_CRITERIA,
+        "records": root["mail"],
+        "allow_light": scan.allow_light,
+    }
+
+
+def _assessment(root: dict[str, object]) -> MailAssessment:
+    data = root["mail"]
+    policy = root.get("mta_sts_policy")
+    return assess(
+        data if isinstance(data, dict) else {},
+        policy if isinstance(policy, dict) else None,
+    )
 
 
 def _strings(value: object) -> list[str]:

@@ -227,6 +227,27 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .key-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
 .results .panel { margin-top: 12px; }
 
+.authorize { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; }
+.authorize input { width: auto; }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+.badge-ok { background: rgba(92, 201, 138, .15); color: var(--ok); }
+.badge-warn { background: rgba(242, 184, 75, .15); color: var(--warning); }
+.badge-fail { background: rgba(242, 102, 92, .15); color: var(--danger); }
+.badge-info { background: var(--surface-2); color: var(--muted); }
+
+.risk-panel { border-left: 4px solid var(--muted); }
+.risk-panel h2 { margin-bottom: 8px; }
+.risk-alto { border-left-color: var(--danger); }
+.risk-medio { border-left-color: var(--warning); }
+.risk-bajo { border-left-color: var(--ok); }
+.card.risk-alto .card-value { color: var(--danger); }
+.card.risk-medio .card-value { color: var(--warning); }
+.card.risk-bajo .card-value { color: var(--ok); }
+.checks { margin-top: 16px; }
+details summary { cursor: pointer; color: var(--accent); }
+.raw-records dl { margin-top: 12px; }
+
 @media (max-width: 720px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
   .sidebar { border-right: 0; border-bottom: 1px solid var(--border); }
