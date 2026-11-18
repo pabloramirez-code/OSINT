@@ -10,13 +10,13 @@
 {% endif %}
 <div class="cards">
   {% if mail_risk %}
-    <div class="card risk-{{ mail_risk }}">
+    <div class="card-stat risk-{{ mail_risk }}">
       <span class="card-value">{{ mail_risk|upper }}</span>
       <span class="card-label">Riesgo de suplantación por correo</span>
     </div>
   {% endif %}
   {% for label, count in counts.items() %}
-    <div class="card"><span class="card-value">{{ count }}</span><span class="card-label">{{ label }}</span></div>
+    <div class="card-stat"><span class="card-value">{{ count }}</span><span class="card-label">{{ label }}</span></div>
   {% endfor %}
 </div>
 

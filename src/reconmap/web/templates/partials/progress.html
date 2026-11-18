@@ -1,13 +1,6 @@
 {% set scan_labels = {"pending": "en cola", "running": "en curso", "done": "terminado", "failed": "fallido"} %}
-<div id="progress" class="panel progress"
-     {% if scan.is_active %}hx-get="/scans/{{ scan.id }}/progress" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
-  <div class="scan-head">
-    <strong>{{ scan.target }}</strong>
-    <span class="pill pill-{{ 'light' if scan.allow_light else 'passive' }}">{{ "ligero" if scan.allow_light else "pasivo" }}</span>
-    <span class="pill pill-neutral">profundidad {{ scan.depth }}</span>
-    <span class="muted">· {{ scan_labels[scan.status] }} · {{ "%02d:%02d"|format(scan.elapsed_seconds // 60, scan.elapsed_seconds % 60) }}</span>
-  </div>
-  {% for run in scan.progress %}
+{% macro runs(progress) %}
+  {% for run in progress %}
     <div class="run run-{{ run.status }}">
       <span class="run-label">{{ run.label }}</span>
       <span class="bar"><span class="bar-fill" style="width: {{ (100 * run.done // run.total) if run.total else 0 }}%"></span></span>
@@ -23,11 +16,27 @@
       </span>
     </div>
   {% endfor %}
-  {% if not scan.is_active %}
+{% endmacro %}
+<div id="progress" class="panel progress"
+     {% if scan.is_active %}hx-get="/scans/{{ scan.id }}/progress" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+  <div class="scan-head">
+    <strong>{{ scan.target }}</strong>
+    <span class="pill pill-{{ 'light' if scan.allow_light else 'passive' }}">{{ "ligero" if scan.allow_light else "pasivo" }}</span>
+    <span class="pill pill-neutral">profundidad {{ scan.depth }}</span>
+    <span class="muted">· {{ scan_labels[scan.status] }} · {{ "%02d:%02d"|format(scan.elapsed_seconds // 60, scan.elapsed_seconds % 60) }}
+      · {{ scan.created_at.strftime("%d/%m/%Y %H:%M") }}</span>
+  </div>
+  {% if scan.is_active %}
+    {{ runs(scan.progress) }}
+  {% else %}
+    {% set failed = scan.progress|selectattr("status", "equalto", "failed")|list|length %}
+    <details class="run-details">
+      <summary>Detalle por fuente · {{ scan.progress|length }} fuentes{% if failed %} · {{ failed }} con error{% endif %}</summary>
+      {{ runs(scan.progress) }}
+    </details>
     <div hx-get="/scans/{{ scan.id }}/tabs/{{ initial_tab or 'summary' }}" hx-trigger="load" hx-target="#results"></div>
   {% endif %}
 </div>
 {% if oob and not scan.is_active %}
-  {% include "partials/scan_form.html" %}
-  {% include "partials/history.html" %}
+  {% include "partials/active_scan.html" %}
 {% endif %}

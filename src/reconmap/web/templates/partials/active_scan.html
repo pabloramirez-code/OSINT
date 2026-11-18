@@ -1,0 +1,8 @@
+<div id="active-scan"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% if active_scan %}
+    <a class="active-scan" href="/scans/{{ active_scan.id }}">
+      <span class="active-dot" aria-hidden="true"></span>
+      <span>En curso: <strong>{{ active_scan.target }}</strong></span>
+    </a>
+  {% endif %}
+</div>

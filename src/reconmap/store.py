@@ -182,6 +182,24 @@ class Store:
         rows = self._query("SELECT * FROM scans ORDER BY created_at DESC LIMIT ?", (limit,))
         return [self._row_to_scan(row) for row in rows]
 
+    def count_targets(self) -> int:
+        return int(self._query("SELECT COUNT(DISTINCT target) FROM scans")[0][0])
+
+    def entity_counts(self, scan_ids: list[str]) -> dict[str, dict[str, int]]:
+        """Número de entidades por tipo de cada escaneo, en una sola consulta."""
+        if not scan_ids:
+            return {}
+        placeholders = ", ".join("?" for _ in scan_ids)
+        rows = self._query(
+            f"SELECT scan_id, type, COUNT(*) AS n FROM entities "  # noqa: S608
+            f"WHERE scan_id IN ({placeholders}) GROUP BY scan_id, type",
+            scan_ids,
+        )
+        counts: dict[str, dict[str, int]] = {scan_id: {} for scan_id in scan_ids}
+        for row in rows:
+            counts[row["scan_id"]][row["type"]] = row["n"]
+        return counts
+
     def active_scan(self) -> Scan | None:
         rows = self._query(
             "SELECT * FROM scans WHERE status IN (?, ?) LIMIT 1",

@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% set section = "projects" %}
 
 {% block title %}{{ scan.target }} · reconmap{% endblock %}
 
 {% block content %}
+<p class="breadcrumb"><a href="/projects">Proyectos</a> / {{ scan.target }}</p>
 {% include "partials/progress.html" %}
 <section id="results" class="results"></section>
 {% endblock %}

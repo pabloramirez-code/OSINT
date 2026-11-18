@@ -1,13 +1,52 @@
 """Datos que necesita cada pestaña. Las plantillas solo pintan; aquí se agrega."""
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from reconmap.checks import SEVERITY_ORDER, Status
 from reconmap.headers_assessment import assess_host
 from reconmap.mail_assessment import RISK_CRITERIA, MailAssessment, assess
 from reconmap.models import EntityType, RelationType, Scan
 from reconmap.store import Store
+
+
+@dataclass(frozen=True)
+class ProjectScan:
+    scan: Scan
+    subdomains: int
+    ips: int
+    mail_risk: str | None
+
+
+@dataclass
+class Project:
+    target: str
+    scans: list[ProjectScan] = field(default_factory=list)
+
+    @property
+    def latest(self) -> ProjectScan:
+        return self.scans[0]
+
+
+def projects(store: Store, limit: int = 500) -> list[Project]:
+    """Escaneos agrupados por dominio, del más reciente al más antiguo."""
+    scans = store.list_scans(limit=limit)
+    counts = store.entity_counts([s.id for s in scans])
+    grouped: dict[str, Project] = {}
+    for scan in scans:
+        roots = store.entities(scan.id, EntityType.DOMAIN)
+        root = roots[0].attributes if roots else {}
+        risk = _assessment(root).risk if isinstance(root.get("mail"), dict) else None
+        by_type = counts.get(scan.id, {})
+        grouped.setdefault(scan.target, Project(scan.target)).scans.append(
+            ProjectScan(
+                scan=scan,
+                subdomains=by_type.get(EntityType.SUBDOMAIN, 0),
+                ips=by_type.get(EntityType.IP, 0),
+                mail_risk=risk,
+            )
+        )
+    return list(grouped.values())
 
 
 @dataclass(frozen=True)

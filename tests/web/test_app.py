@@ -33,7 +33,7 @@ def test_landing_lists_modules_and_modes(client: TestClient) -> None:
 
 
 def test_landing_images_are_served(client: TestClient) -> None:
-    for name in ("progreso", "subdominios", "ips", "correo"):
+    for name in ("grafo", "subdominios", "ips", "correo"):
         response = client.get(f"/static/img/captura-{name}.png")
         assert response.status_code == 200
         assert response.headers["content-type"] == "image/png"

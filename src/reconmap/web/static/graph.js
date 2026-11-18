@@ -9,15 +9,15 @@ const CYTOSCAPE = {
 };
 
 const TYPES = {
-  domain: { name: "Dominio", color: "#4fa3f7", shape: "star", size: 48 },
-  subdomain: { name: "Subdominio", color: "#7cc4ff", shape: "round-rectangle", size: 24 },
-  ip: { name: "IP", color: "#5cc98a", shape: "ellipse", size: 22 },
-  asn: { name: "Sistema autónomo", color: "#b48cf2", shape: "hexagon", size: 30 },
-  org: { name: "Organización", color: "#f28cc4", shape: "diamond", size: 32 },
-  port: { name: "Puerto", color: "#f2b84b", shape: "triangle", size: 14 },
-  certificate: { name: "Certificado", color: "#8b95a3", shape: "tag", size: 18 },
-  url: { name: "URL archivada", color: "#6f7a88", shape: "rectangle", size: 14 },
-  candidate: { name: "Candidato", color: "#f2665c", shape: "vee", size: 18 },
+  domain: { name: "Dominio", color: "#2563eb", shape: "star", size: 48 },
+  subdomain: { name: "Subdominio", color: "#60a5fa", shape: "round-rectangle", size: 24 },
+  ip: { name: "IP", color: "#22a35a", shape: "ellipse", size: 22 },
+  asn: { name: "Sistema autónomo", color: "#8b5cf6", shape: "hexagon", size: 30 },
+  org: { name: "Organización", color: "#db2777", shape: "diamond", size: 32 },
+  port: { name: "Puerto", color: "#f59e0b", shape: "triangle", size: 14 },
+  certificate: { name: "Certificado", color: "#94a3b8", shape: "tag", size: 18 },
+  url: { name: "URL archivada", color: "#64748b", shape: "rectangle", size: 14 },
+  candidate: { name: "Candidato", color: "#dc2626", shape: "vee", size: 18 },
 };
 
 const STATUS_LABELS = { ok: "Correcto", warn: "Mejorable", fail: "Problema", info: "Info" };
@@ -66,26 +66,26 @@ function graphStyle() {
       selector: "node",
       style: {
         label: "data(short)",
-        color: "#e3e7ec",
+        color: "#1f2933",
         "font-size": 9,
         "text-valign": "bottom",
         "text-margin-y": 4,
-        "text-outline-color": "#0f1216",
+        "text-outline-color": "#ffffff",
         "text-outline-width": 2,
         "min-zoomed-font-size": 4,
       },
     },
     ...byType,
     { selector: 'node[type = "certificate"], node[type = "port"], node[type = "url"]', style: { "min-zoomed-font-size": 9 } },
-    { selector: "node[?group]", style: { "border-width": 2, "border-style": "dashed", "border-color": "#e3e7ec", width: 34, height: 34 } },
-    { selector: 'node[worst = "warn"]', style: { "border-width": 3, "border-color": "#f2b84b" } },
-    { selector: 'node[worst = "fail"]', style: { "border-width": 4, "border-color": "#f2665c" } },
+    { selector: "node[?group]", style: { "border-width": 2, "border-style": "dashed", "border-color": "#637083", width: 34, height: 34 } },
+    { selector: 'node[worst = "warn"]', style: { "border-width": 3, "border-color": "#d97706" } },
+    { selector: 'node[worst = "fail"]', style: { "border-width": 4, "border-color": "#c62828" } },
     {
       selector: "edge",
       style: {
         width: 1,
-        "line-color": "#3a4350",
-        "target-arrow-color": "#3a4350",
+        "line-color": "#c7cfda",
+        "target-arrow-color": "#c7cfda",
         "target-arrow-shape": "triangle",
         "arrow-scale": 0.6,
         "curve-style": "bezier",
@@ -93,8 +93,8 @@ function graphStyle() {
     },
     { selector: ".faded", style: { opacity: 0.12 } },
     { selector: ".hidden", style: { display: "none" } },
-    { selector: ".fresh", style: { "underlay-color": "#4fa3f7", "underlay-opacity": 0.35, "underlay-padding": 6 } },
-    { selector: "node:selected", style: { "underlay-color": "#ffffff", "underlay-opacity": 0.25, "underlay-padding": 8 } },
+    { selector: ".fresh", style: { "underlay-color": "#2563eb", "underlay-opacity": 0.25, "underlay-padding": 6 } },
+    { selector: "node:selected", style: { "underlay-color": "#2563eb", "underlay-opacity": 0.18, "underlay-padding": 8 } },
   ];
 }
 

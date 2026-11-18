@@ -1,8 +1,13 @@
 {% extends "base.html" %}
+{% set section = "settings" %}
 
 {% block title %}Ajustes · reconmap{% endblock %}
 
 {% block content %}
+<header class="page-header">
+  <h1>Ajustes</h1>
+  <p>Fuentes disponibles y claves de API. Las claves se leen del archivo <code>.env</code>.</p>
+</header>
 <section class="panel">
   <h2>Módulos</h2>
   <div class="table-wrap">

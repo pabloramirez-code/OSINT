@@ -17,18 +17,26 @@
   <div class="layout">
     <aside class="sidebar">
       <div class="sidebar-head">
-        <a href="/" class="brand">reconmap</a>
-        <label for="nav-toggle" class="nav-button" aria-label="Mostrar historial">☰</label>
+        <a href="/" class="brand"><span class="brand-mark" aria-hidden="true"></span>reconmap</a>
+        <label for="nav-toggle" class="nav-button" aria-label="Mostrar menú">☰</label>
       </div>
-      <nav class="sidebar-body">
-        <h2 class="sidebar-title">Historial</h2>
-        {% include "partials/history.html" %}
-        <a href="/settings" class="settings-link">Ajustes</a>
+      <nav class="sidebar-body" aria-label="Principal">
+        <ul class="nav">
+          <li><a href="/" class="{{ 'current' if section == 'home' }}">Inicio</a></li>
+          <li>
+            <a href="/projects" class="{{ 'current' if section == 'projects' }}">
+              Proyectos <span class="nav-count">{{ project_count }}</span>
+            </a>
+          </li>
+          <li><a href="/settings" class="{{ 'current' if section == 'settings' }}">Ajustes</a></li>
+        </ul>
+        {% include "partials/active_scan.html" %}
       </nav>
     </aside>
     <main class="content">
-      {% include "partials/scan_form.html" %}
-      {% block content %}{% endblock %}
+      <div class="container">
+        {% block content %}{% endblock %}
+      </div>
     </main>
   </div>
 </body>

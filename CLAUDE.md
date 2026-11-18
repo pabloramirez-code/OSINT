@@ -173,7 +173,9 @@ interfaz: la interfaz lista los módulos dinámicamente.
 └──────────────┴───────────────────────────────────────────────────────┘
 ```
 
-- Barra lateral: historial de escaneos (estado con icono) y enlace a Ajustes.
+- Barra lateral: navegación (Inicio, Proyectos, Ajustes) y aviso del escaneo en
+  curso. Los escaneos anteriores viven en la página **Proyectos** (`/projects`):
+  un bloque desplegable por dominio con todos sus escaneos.
 - Cabecera: campo de dominio, selector de profundidad, botón.
 - Progreso: una barra por módulo con estado y número de resultados; errores de
   módulo visibles en ámbar (no rompen el escaneo).
@@ -188,7 +190,9 @@ interfaz: la interfaz lista los módulos dinámicamente.
   - **JSON:** botón de descarga del informe completo.
 - **Ajustes:** qué módulos están activos, cuáles necesitan clave y si la clave
   está configurada (✓/✗, **nunca** el valor).
-- Tema oscuro, tipografía del sistema, una sola hoja `static/app.css`.
+- Tema **claro sobrio** (cambiado del oscuro original a petición del usuario):
+  fondo gris muy claro, tarjetas blancas con sombra suave, un único acento
+  azul; tipografía del sistema, una sola hoja `static/app.css`.
 - Responsive: usable en el móvil (la barra lateral se pliega).
 - Errores de usuario claros: dominio inválido → mensaje junto al campo, sin
   recargar la página.
@@ -719,3 +723,7 @@ uv run mypy src
     riesgo de correo, cabeceras, caducidad del dominio), información y
     relacionados navegables; borde rojo/ámbar según el peor problema; enlace
     `#nodo=<id>`. `insights.py` es la base de las reglas de la Fase 4.
+  - Interfaz (2026-11-18): tema claro, formulario solo en Inicio (tarjeta
+    "Nuevo escaneo" + proyectos recientes), página Proyectos agrupada por
+    dominio y plegada, y el detalle por fuente de un escaneo terminado plegado
+    en una línea. Capturas de la portada regeneradas con el tema claro.

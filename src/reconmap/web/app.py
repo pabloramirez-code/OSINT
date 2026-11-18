@@ -57,9 +57,11 @@ def create_app(
         context: Mapping[str, object] | None = None,
         status_code: int = 200,
     ) -> HTMLResponse:
+        active = store.active_scan()
         page: dict[str, object] = {
-            "history": store.list_scans(),
-            "busy": store.active_scan() is not None,
+            "active_scan": active,
+            "busy": active is not None,
+            "project_count": store.count_targets(),
         }
         page.update(context or {})
         return templates.TemplateResponse(request, name, page, status_code=status_code)
@@ -99,8 +101,16 @@ def create_app(
 
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request) -> HTMLResponse:
-        context = {"modules": module_cards(), "max_hosts": settings.max_hosts}
+        context = {
+            "modules": module_cards(),
+            "max_hosts": settings.max_hosts,
+            "recent": views.projects(store, limit=40)[:4],
+        }
         return render(request, "index.html", context)
+
+    @app.get("/projects", response_class=HTMLResponse)
+    async def projects_page(request: Request) -> HTMLResponse:
+        return render(request, "projects.html", {"projects": views.projects(store)})
 
     @app.get("/health")
     async def health() -> dict[str, str]:

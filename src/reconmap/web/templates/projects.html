@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% set section = "projects" %}
+{% set status_icons = {"pending": "○", "running": "●", "done": "✓", "failed": "✗"} %}
+{% set status_labels = {"pending": "en cola", "running": "en curso", "done": "terminado", "failed": "fallido"} %}
+
+{% block title %}Proyectos · reconmap{% endblock %}
+
+{% block content %}
+<header class="page-header">
+  <h1>Proyectos</h1>
+  <p>Cada dominio escaneado es un proyecto. Despliégalo para ver sus escaneos anteriores.</p>
+</header>
+
+{% if projects %}
+  <div class="projects">
+    {% for project in projects %}
+      <details class="project">
+        <summary>
+          <span class="project-name">{{ project.target }}</span>
+          <span class="project-meta">
+            {{ project.scans|length }} escaneo{{ "s" if project.scans|length != 1 }}
+            · último {{ project.latest.scan.created_at.strftime("%d/%m/%Y %H:%M") }}
+          </span>
+          <span class="project-latest">
+            {% if project.latest.mail_risk %}<span class="pill pill-neutral">correo: {{ project.latest.mail_risk }}</span>{% endif %}
+            <span class="pill pill-neutral">{{ project.latest.subdomains }} subdominios</span>
+            <a class="button button-secondary" href="/scans/{{ project.latest.scan.id }}">Abrir último</a>
+          </span>
+        </summary>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fecha</th><th>Estado</th><th>Modo</th><th>Profundidad</th>
+                <th>Subdominios</th><th>IPs</th><th>Riesgo de correo</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in project.scans %}
+                <tr>
+                  <td class="nowrap">{{ item.scan.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+                  <td class="nowrap">
+                    <span class="status-icon {{ item.scan.status }}">{{ status_icons[item.scan.status] }}</span>
+                    {{ status_labels[item.scan.status] }}
+                  </td>
+                  <td><span class="pill pill-{{ 'light' if item.scan.allow_light else 'passive' }}">{{ "ligero" if item.scan.allow_light else "pasivo" }}</span></td>
+                  <td>{{ item.scan.depth }}</td>
+                  <td>{{ item.subdomains }}</td>
+                  <td>{{ item.ips }}</td>
+                  <td>{{ item.mail_risk or "—" }}</td>
+                  <td class="nowrap"><a href="/scans/{{ item.scan.id }}">Ver resultados →</a></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    {% endfor %}
+  </div>
+{% else %}
+  <section class="panel empty">
+    <p>Todavía no hay proyectos.</p>
+    <p><a class="button" href="/">Lanzar el primer escaneo</a></p>
+  </section>
+{% endif %}
+{% endblock %}
