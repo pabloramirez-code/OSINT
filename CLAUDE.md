@@ -607,5 +607,9 @@ uv run mypy src
   - Caché persistente en SQLite (tabla `cache`), compartida entre web y CLI.
   - Al arrancar, los escaneos que quedaron `running` se marcan `failed`.
   - El selector de profundidad está fijo en 1 hasta la Fase 2.
+  - Pedido por el usuario (2026-11-18): una pasada dedicada a mejorar la
+    interfaz más adelante (sin fecha; no empezar sin que lo pida).
+  - Idea del usuario para `headers` (Fase 2b): una petición al dominio y
+    marcar cabeceras ausentes o inseguras según OWASP Secure Headers.
   - Aviso pendiente: Starlette sugiere `httpx2` para TestClient (no está en el
     stack; no se ha añadido).
