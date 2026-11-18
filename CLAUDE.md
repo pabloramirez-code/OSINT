@@ -460,11 +460,10 @@ Tareas:
       revelación de versiones, X-XSS-Protection, cookies (solo nombre y
       atributos), certificado y paso de HTTP a HTTPS. Si HTTPS redirige, solo
       se evalúa HSTS en ese host. Probado contra example.com y badssl.com.
-- [ ] ~~`modules/buckets.py`~~ **En pausa:** con plan gratuito, la API de
-      GrayHatWarfare devuelve 0 buckets siempre ("As a free user you can list
-      0 … buckets"). Decisión pendiente del usuario. Diseño acordado si se
-      retoma: palabra principal del dominio si tiene ≥5 letras + palabras
-      clave manuales; entidades `candidate` (nombre, proveedor, nº archivos).
+- [x] ~~`modules/buckets.py`~~ **Descartado** (2026-11-18): con plan gratuito
+      la API de GrayHatWarfare lista 0 buckets ("As a free user you can list 0
+      … buckets"). La regla de entidades `candidate` se mantiene por si se
+      añade otra fuente de búsqueda por palabra clave.
       Autenticación: cabecera `Authorization: Bearer <token>`; en `.env` se
       guarda solo el token (sin la palabra `Bearer`) y el módulo la añade.
 - [ ] Pestaña o sección "Candidatos no atribuidos".
