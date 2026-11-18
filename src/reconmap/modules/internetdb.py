@@ -19,6 +19,7 @@ class InternetDbHost(BaseModel):
 class InternetDb:
     name = "internetdb"
     label = "Shodan InternetDB"
+    description = "Puertos abiertos, etiquetas y CVEs conocidas de cada IP"
     accepts = frozenset({EntityType.IP})
     contact = Contact.PASSIVE
     requires_key: str | None = None

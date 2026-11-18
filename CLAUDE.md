@@ -691,3 +691,8 @@ uv run mypy src
   - Correo: un registro que no responde a tiempo se marca "no comprobado"
     (nunca "no existe"); si es SPF o DMARC, el riesgo queda "desconocido". Las
     consultas incompletas no se guardan en caché.
+  - Portada (2026-11-18, pedida por el usuario): introducción con modos de
+    contacto, profundidad, secciones con capturas reales (de un escaneo pasivo
+    de proton.me, en `web/static/img/`) y fuentes listadas dinámicamente
+    (nuevo atributo `description` en el contrato de módulo). La casilla de
+    autorización pasa a ser un selector Pasivo | Ligero.

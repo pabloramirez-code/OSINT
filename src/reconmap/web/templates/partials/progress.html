@@ -3,6 +3,8 @@
      {% if scan.is_active %}hx-get="/scans/{{ scan.id }}/progress" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
   <div class="scan-head">
     <strong>{{ scan.target }}</strong>
+    <span class="pill pill-{{ 'light' if scan.allow_light else 'passive' }}">{{ "ligero" if scan.allow_light else "pasivo" }}</span>
+    <span class="pill pill-neutral">profundidad {{ scan.depth }}</span>
     <span class="muted">· {{ scan_labels[scan.status] }} · {{ "%02d:%02d"|format(scan.elapsed_seconds // 60, scan.elapsed_seconds % 60) }}</span>
   </div>
   {% for run in scan.progress %}

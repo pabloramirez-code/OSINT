@@ -21,6 +21,7 @@ ISSUANCES = TypeAdapter(list[Issuance])
 class CertSpotter:
     name = "certspotter"
     label = "Cert Spotter"
+    description = "Subdominios en certificados TLS vigentes"
     accepts = frozenset({EntityType.DOMAIN})
     contact = Contact.PASSIVE
     requires_key: str | None = None

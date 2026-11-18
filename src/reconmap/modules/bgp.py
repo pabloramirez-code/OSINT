@@ -24,6 +24,7 @@ class _Envelope[T](BaseModel):
 class Bgp:
     name = "bgp"
     label = "BGP (RIPEstat)"
+    description = "IP → sistema autónomo (ASN) → organización propietaria"
     accepts = frozenset({EntityType.IP})
     contact = Contact.PASSIVE
     requires_key: str | None = None

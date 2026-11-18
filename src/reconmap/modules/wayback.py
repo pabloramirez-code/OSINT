@@ -11,6 +11,7 @@ CDX = "https://web.archive.org/cdx/search/cdx"
 class Wayback:
     name = "wayback"
     label = "Wayback Machine"
+    description = "URLs históricas archivadas y subdominios que aparecen en ellas"
     accepts = frozenset({EntityType.DOMAIN})
     contact = Contact.PASSIVE
     requires_key: str | None = None

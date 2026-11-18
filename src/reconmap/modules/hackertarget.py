@@ -8,6 +8,7 @@ from reconmap.modules.subdomains import in_scope_name, subdomain_result
 class HackerTarget:
     name = "hackertarget"
     label = "HackerTarget"
+    description = "Subdominios e IPs conocidos por su base de datos"
     accepts = frozenset({EntityType.DOMAIN})
     contact = Contact.PASSIVE
     requires_key: str | None = None

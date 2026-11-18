@@ -18,6 +18,7 @@ class ModuleError(Exception):
 class Module(Protocol):
     name: str
     label: str
+    description: str
     accepts: frozenset[EntityType]
     contact: Contact
     requires_key: str | None

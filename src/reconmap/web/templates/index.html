@@ -1,8 +1,145 @@
 {% extends "base.html" %}
 
+{% set passive = modules|selectattr("contact", "equalto", "passive")|list %}
+{% set light = modules|selectattr("contact", "equalto", "light")|list %}
+
 {% block content %}
-<section class="panel empty">
-  <p>Introduce un dominio para empezar un reconocimiento pasivo.</p>
-  <p class="muted">Solo se consultan fuentes públicas; no se envía tráfico al objetivo.</p>
-</section>
+<div class="intro">
+
+  <section class="hero">
+    <div class="hero-text">
+      <p class="eyebrow">Reconocimiento pasivo de infraestructura</p>
+      <h1>Descubre qué expone un dominio sin tocarlo</h1>
+      <p class="lead">
+        Escribe un dominio arriba y reconmap consulta {{ modules|length }} fuentes públicas en paralelo:
+        subdominios, IPs, puertos, sistemas autónomos y configuración del correo.
+      </p>
+      <ul class="hero-points">
+        <li>Progreso en directo por fuente; si una falla, las demás siguen.</li>
+        <li>Solo infraestructura: nunca datos de personas.</li>
+        <li>Todo lo que llega de fuera se muestra como texto, nunca como HTML.</li>
+      </ul>
+    </div>
+    <figure class="shot hero-shot">
+      <img src="/static/img/captura-progreso.png" width="1200" height="520"
+           alt="Panel de progreso de un escaneo real: una barra por fuente con su estado y número de resultados">
+      <figcaption>Escaneo real: cada fuente avanza por separado.</figcaption>
+    </figure>
+  </section>
+
+  <section class="intro-section">
+    <h2>Modos de contacto</h2>
+    <p class="section-lead">Tú decides, en cada escaneo, cuánto puede acercarse reconmap al objetivo.</p>
+    <div class="modes">
+      <article class="mode mode-passive">
+        <span class="mode-badge">Siempre activo</span>
+        <h3>Pasivo</h3>
+        <p class="mode-claim">Ni un paquete al objetivo.</p>
+        <p>Solo pregunta a terceros que ya tienen la información: registros de certificados, DNS, archivos históricos y bases de datos de Internet.</p>
+        <p class="mode-modules">{{ passive|length }} fuentes: {{ passive|map(attribute="label")|join(", ") }}.</p>
+      </article>
+      <article class="mode mode-light">
+        <span class="mode-badge">Requiere tu autorización</span>
+        <h3>Ligero</h3>
+        <p class="mode-claim">Como visitar su web una vez.</p>
+        <p>Como mucho una petición por host, sin seguir enlaces ni salir del dominio. Solo se activa si eliges <strong>Ligero</strong> al lanzar el escaneo.</p>
+        <p class="mode-modules">
+          {% if light %}{{ light|map(attribute="label")|join(", ") }}.{% endif %}
+          Próximamente: cabeceras de seguridad HTTP.
+        </p>
+      </article>
+      <article class="mode mode-active">
+        <span class="mode-badge">No disponible</span>
+        <h3>Activo</h3>
+        <p class="mode-claim">Fuera de alcance.</p>
+        <p>Escaneo de puertos, fuerza bruta de rutas o subdominios. reconmap observa y marca; no ataca.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="intro-section">
+    <h2>Profundidad</h2>
+    <p class="section-lead">Cuántos saltos sigue reconmap desde el dominio, siempre dentro de él.</p>
+    <ol class="depth-steps">
+      <li>
+        <span class="depth-number">1</span>
+        <h3>Dominio y sus subdominios</h3>
+        <p>Analiza el dominio y cada subdominio que encuentren las fuentes: DNS, IPs, puertos y red de cada uno.</p>
+        <p class="muted">Recomendado. De 1 a 3 minutos en un dominio mediano.</p>
+      </li>
+      <li>
+        <span class="depth-number">2</span>
+        <h3>Un salto más</h3>
+        <p>También analiza los subdominios que aparecen al estudiar otros subdominios (alias CNAME, nombres asociados a una IP).</p>
+        <p class="muted">Más cobertura, más tiempo.</p>
+      </li>
+      <li>
+        <span class="depth-number">3</span>
+        <h3>Máximo</h3>
+        <p>Sigue la cadena un nivel más. Útil en dominios grandes con muchas capas.</p>
+        <p class="muted">El más lento.</p>
+      </li>
+    </ol>
+    <p class="note">En cualquier profundidad se analizan como mucho {{ max_hosts }} subdominios por escaneo (<code>RECONMAP_MAX_HOSTS</code>). Lo que se salga del dominio se anota, pero nunca se sigue.</p>
+  </section>
+
+  <section class="intro-section">
+    <h2>Qué obtienes</h2>
+    <div class="features">
+      <article class="feature">
+        <figure class="shot">
+          <img src="/static/img/captura-subdominios.png" width="1200" height="600" loading="lazy"
+               alt="Tabla de subdominios con sus IPs, las fuentes que los encontraron y la fecha en que se vieron por primera vez">
+        </figure>
+        <h3>Subdominios</h3>
+        <p>Todos los nombres del dominio, con sus IPs y qué fuentes los encontraron. Filtrable y ordenable.</p>
+      </article>
+      <article class="feature">
+        <figure class="shot">
+          <img src="/static/img/captura-ips.png" width="1200" height="600" loading="lazy"
+               alt="Tabla de IPs con hosts, sistema autónomo, organización, puertos abiertos y CVEs">
+        </figure>
+        <h3>IPs y puertos</h3>
+        <p>Quién aloja cada IP (ASN y organización), qué puertos expone y qué CVEs se le conocen.</p>
+      </article>
+      <article class="feature">
+        <figure class="shot">
+          <img src="/static/img/captura-correo.png" width="1200" height="760" loading="lazy"
+               alt="Evaluación del correo con el riesgo de suplantación y un semáforo para SPF, DMARC, DKIM y otros controles">
+        </figure>
+        <h3>Correo</h3>
+        <p>¿Se puede suplantar el dominio? SPF, DMARC, DKIM, MTA-STS y DNSSEC con un semáforo y cómo corregir cada punto.</p>
+      </article>
+      <article class="feature feature-soon">
+        <div class="soon-box">Próximamente</div>
+        <h3>Grafo y hallazgos</h3>
+        <p>La infraestructura dibujada como un grafo interactivo y hallazgos objetivos con su evidencia.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="intro-section">
+    <h2>Fuentes</h2>
+    <div class="sources">
+      {% for module in modules %}
+        <article class="source source-{{ module.contact }}">
+          <div class="source-head">
+            <h3>{{ module.label }}</h3>
+            <span class="pill pill-{{ module.contact }}">{{ "pasivo" if module.contact == "passive" else "ligero" }}</span>
+          </div>
+          <p>{{ module.description }}</p>
+          <p class="source-meta">
+            {% if module.requires_key %}
+              {% if module.skip_reason %}<span class="status-bad">✗ Falta {{ module.requires_key }}</span>
+              {% else %}<span class="status-good">✓ Clave configurada</span>{% endif %}
+            {% else %}
+              <span class="muted">Sin clave</span>
+            {% endif %}
+          </p>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+
+</div>
 {% endblock %}

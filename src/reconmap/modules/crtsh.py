@@ -29,6 +29,7 @@ RECORDS = TypeAdapter(list[CrtShRecord])
 class CrtSh:
     name = "crtsh"
     label = "Certificate Transparency (crt.sh)"
+    description = "Subdominios y certificados de los registros públicos de Certificate Transparency"
     accepts = frozenset({EntityType.DOMAIN})
     contact = Contact.PASSIVE
     requires_key: str | None = None

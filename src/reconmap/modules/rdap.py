@@ -30,6 +30,7 @@ class RdapDomain(BaseModel):
 class Rdap:
     name = "rdap"
     label = "Registro (RDAP)"
+    description = "Registrador, fechas de alta y caducidad del dominio"
     accepts = frozenset({EntityType.DOMAIN})
     contact = Contact.PASSIVE
     requires_key: str | None = None

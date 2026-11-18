@@ -26,6 +26,7 @@ class FakeModule:
     `extra`, o lanza `error`. Registra en `seen` cada entidad que procesa."""
 
     label = "Fuente falsa"
+    description = "Módulo de prueba"
     cache_ttl = timedelta(minutes=1)
     rate_limit = 100.0
 

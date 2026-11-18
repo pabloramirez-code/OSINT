@@ -12,6 +12,7 @@ class MtaSts:
 
     name = "mta_sts"
     label = "Política MTA-STS"
+    description = "Descarga la política MTA-STS publicada por el dominio"
     accepts = frozenset({EntityType.DOMAIN})
     contact = Contact.LIGHT
     requires_key: str | None = None

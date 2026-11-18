@@ -45,6 +45,7 @@ def make_resolver(servers: Sequence[str] = ()) -> Resolve:
 class Dns:
     name = "dns"
     label = "DNS"
+    description = "Registros A, AAAA, MX, NS, TXT, CNAME y CAA de cada host"
     accepts = frozenset({EntityType.DOMAIN, EntityType.SUBDOMAIN})
     contact = Contact.PASSIVE
     requires_key: str | None = None

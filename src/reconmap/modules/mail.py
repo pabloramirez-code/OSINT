@@ -44,6 +44,7 @@ class Mail:
 
     name = "mail"
     label = "Correo (SPF, DMARC, DKIM…)"
+    description = "SPF, DMARC, DKIM, MTA-STS, TLS-RPT, BIMI y DNSSEC"
     accepts = frozenset({EntityType.DOMAIN})
     contact = Contact.PASSIVE
     requires_key: str | None = None

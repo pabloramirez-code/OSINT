@@ -81,9 +81,24 @@ def create_app(
         context = {"code": exc.status_code, "message": exc.detail}
         return render(request, "error.html", context, exc.status_code)
 
+    def module_cards() -> list[dict[str, object]]:
+        any_scan = Scan(id="-", target="-", allow_light=True)
+        return [
+            {
+                "label": m.label,
+                "description": m.description,
+                "contact": m.contact,
+                "accepts": sorted(m.accepts),
+                "requires_key": m.requires_key,
+                "skip_reason": engine.skip_reason(m, any_scan),
+            }
+            for m in engine.modules
+        ]
+
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request) -> HTMLResponse:
-        return render(request, "index.html")
+        context = {"modules": module_cards(), "max_hosts": settings.max_hosts}
+        return render(request, "index.html", context)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -145,18 +160,9 @@ def create_app(
 
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page(request: Request) -> HTMLResponse:
-        modules = [
-            {
-                "label": m.label,
-                "contact": m.contact,
-                "accepts": sorted(m.accepts),
-                "requires_key": m.requires_key,
-                "skip_reason": engine.skip_reason(m, Scan(id="-", target="-", allow_light=True)),
-            }
-            for m in engine.modules
-        ]
         configured = {name: name in keys for name in KNOWN_KEYS}
-        return render(request, "settings.html", {"modules": modules, "configured": configured})
+        context = {"modules": module_cards(), "configured": configured}
+        return render(request, "settings.html", context)
 
     @app.get("/api/scans/{scan_id}/report")
     async def scan_report(scan_id: str) -> JSONResponse:
