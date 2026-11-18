@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Ajustes · reconmap{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <h2>Módulos</h2>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr><th>Fuente</th><th>Contacto</th><th>Acepta</th><th>Clave</th><th>Estado</th></tr>
+      </thead>
+      <tbody>
+        {% for module in modules %}
+          <tr>
+            <td>{{ module.label }}</td>
+            <td>{{ module.contact }}</td>
+            <td>{{ module.accepts|join(", ") }}</td>
+            <td>{% if module.requires_key %}<code>{{ module.requires_key }}</code>{% else %}—{% endif %}</td>
+            <td>
+              {% if module.skip_reason %}<span class="status-bad">✗ {{ module.skip_reason }}</span>
+              {% else %}<span class="status-good">✓ activo</span>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Claves de API</h2>
+  <p class="muted">Se leen del archivo <code>.env</code>. Aquí solo se indica si están configuradas; su valor nunca se muestra.</p>
+  <ul class="key-list">
+    {% for name, is_set in configured.items() %}
+      <li>
+        <span class="{{ 'status-good' if is_set else 'status-bad' }}">{{ "✓" if is_set else "✗" }}</span>
+        <code>{{ name }}</code>
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

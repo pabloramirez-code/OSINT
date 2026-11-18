@@ -1,0 +1,39 @@
+{% extends "partials/tabs.html" %}
+{% set active = "ips" %}
+
+{% block tab %}
+{% if rows %}
+  <input type="search" class="table-filter" placeholder="Filtrar IPs, ASN, puertos…" data-filter="#ip-table">
+  <div class="table-wrap">
+    <table id="ip-table" class="data-table">
+      <thead>
+        <tr>
+          <th data-sort>IP</th>
+          <th data-sort>Hosts</th>
+          <th data-sort>ASN</th>
+          <th data-sort>Organización</th>
+          <th data-sort>Puertos</th>
+          <th data-sort>CVEs</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td><code>{{ row.ip }}</code>{% for tag in row.tags %} <span class="tag">{{ tag }}</span>{% endfor %}</td>
+            <td>{% for host in row.hosts %}<code>{{ host }}</code>{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}</td>
+            <td>{{ row.asns|join(", ") or "—" }}</td>
+            <td>{{ row.orgs|join(", ") or "—" }}</td>
+            <td>{{ row.ports|join(", ") or "—" }}</td>
+            <td>
+              {% for cve in row.vulns %}<span class="tag tag-warning">{{ cve }}</span> {% else %}—{% endfor %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">Puertos y CVEs según Shodan (sin contactar con el objetivo). Las CVEs requieren verificar la versión real del servicio.</p>
+{% else %}
+  <p class="muted">No se han encontrado IPs.</p>
+{% endif %}
+{% endblock %}

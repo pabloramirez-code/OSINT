@@ -10,11 +10,14 @@
       <span class="run-label">{{ run.label }}</span>
       <span class="bar"><span class="bar-fill" style="width: {{ (100 * run.done // run.total) if run.total else 0 }}%"></span></span>
       <span class="run-status">
-        {% if run.status == "done" %}hecho{% if run.results %} ({{ run.results }}){% endif %}
-        {% elif run.status == "running" %}{{ run.done }}/{{ run.total }}
-        {% elif run.status == "failed" %}error: {{ run.error }}
-        {% elif run.status == "skipped" %}omitido{% if run.error %}: {{ run.error }}{% endif %}
-        {% else %}en cola{% endif %}
+        {%- if run.status == "done" %}hecho{% if run.results %} ({{ run.results }}){% endif %}
+        {%- elif run.status == "running" %}{{ run.done }}/{{ run.total }}
+        {%- elif run.status == "failed" %}error: {{ run.error }}
+        {%- elif run.status == "skipped" %}omitido{% if run.error %}: {{ run.error }}{% endif %}
+        {%- else %}en cola{% endif %}
+        {%- if run.errors and run.status != "failed" %}
+          <span class="run-errors" title="{{ run.error }}">· {{ run.errors }} {{ "errores" if run.errors > 1 else "error" }}</span>
+        {%- endif %}
       </span>
     </div>
   {% endfor %}

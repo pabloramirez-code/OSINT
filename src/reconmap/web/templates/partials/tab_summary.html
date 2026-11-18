@@ -2,6 +2,12 @@
 {% set active = "summary" %}
 
 {% block tab %}
+{% if scan.host_limit_reached %}
+  <p class="notice">Se alcanzó el tope de {{ max_hosts }} subdominios procesados; el resto se listó pero no se analizó. Puedes subirlo con <code>RECONMAP_MAX_HOSTS</code>.</p>
+{% endif %}
+{% if wayback_truncated %}
+  <p class="notice">El Wayback Machine devolvió el máximo de URLs configurado (<code>RECONMAP_WAYBACK_LIMIT</code>); puede haber más.</p>
+{% endif %}
 <div class="cards">
   {% for label, count in counts.items() %}
     <div class="card"><span class="card-value">{{ count }}</span><span class="card-label">{{ label }}</span></div>
@@ -37,6 +43,16 @@
     {% endif %}
   </section>
 </div>
+
+{% if requests %}
+  <section class="panel">
+    <h3>Peticiones por fuente</h3>
+    <dl>
+      {% for label, count in requests %}<dt>{{ label }}</dt><dd>{{ count }}</dd>{% endfor %}
+    </dl>
+    <p class="muted">Las respuestas en caché no cuentan como petición.</p>
+  </section>
+{% endif %}
 
 {% if emails %}
   <p class="muted">Los certificados mencionan {{ emails }} dirección(es) de correo. Solo se guarda el recuento.</p>

@@ -11,27 +11,39 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader
 from starlette.exceptions import HTTPException
 
-from reconmap.config import Settings
+from reconmap.config import KNOWN_KEYS, Settings, api_keys, load_env_file
 from reconmap.engine import Engine
-from reconmap.models import EntityType, RelationType, Scan
+from reconmap.models import Scan
 from reconmap.modules import default_modules
 from reconmap.modules.base import Module
 from reconmap.normalize import InvalidDomainError, normalize_domain
 from reconmap.report.json_report import build_report
 from reconmap.store import Store
+from reconmap.web import views
 
 WEB_DIR = Path(__file__).parent
-TABS = {"summary", "subdomains", "json"}
+TABS = {"summary", "subdomains", "ips", "json"}
 
 templates = Jinja2Templates(
     env=Environment(loader=FileSystemLoader(WEB_DIR / "templates"), autoescape=True)
 )
 
 
-def create_app(store: Store | None = None, modules: list[Module] | None = None) -> FastAPI:
-    store = store or Store(Settings().db_path)
+def create_app(
+    store: Store | None = None,
+    modules: list[Module] | None = None,
+    keys: Mapping[str, str] | None = None,
+) -> FastAPI:
+    settings = Settings()
+    keys = api_keys() if keys is None else keys
+    store = store or Store(settings.db_path)
     store.fail_interrupted_scans()
-    engine = Engine(store, default_modules() if modules is None else modules)
+    engine = Engine(
+        store,
+        default_modules(settings) if modules is None else modules,
+        keys=keys,
+        max_hosts=settings.max_hosts,
+    )
     running: set[asyncio.Task[None]] = set()
 
     app = FastAPI(title="reconmap")
@@ -116,8 +128,32 @@ def create_app(store: Store | None = None, modules: list[Module] | None = None) 
         scan = get_scan(scan_id)
         if tab not in TABS:
             raise HTTPException(404, "Pestaña desconocida")
-        context = {"scan": scan, **tab_context(store, scan, tab)}
+        context = {"scan": scan, **tab_context(scan, tab)}
         return render(request, f"partials/tab_{tab}.html", context)
+
+    def tab_context(scan: Scan, tab: str) -> dict[str, object]:
+        if tab == "summary":
+            return views.summary(store, scan, settings.max_hosts)
+        if tab == "subdomains":
+            return views.subdomains(store, scan)
+        if tab == "ips":
+            return views.ips(store, scan)
+        return {}
+
+    @app.get("/settings", response_class=HTMLResponse)
+    async def settings_page(request: Request) -> HTMLResponse:
+        modules = [
+            {
+                "label": m.label,
+                "contact": m.contact,
+                "accepts": sorted(m.accepts),
+                "requires_key": m.requires_key,
+                "skip_reason": engine.skip_reason(m, Scan(id="-", target="-", allow_light=True)),
+            }
+            for m in engine.modules
+        ]
+        configured = {name: name in keys for name in KNOWN_KEYS}
+        return render(request, "settings.html", {"modules": modules, "configured": configured})
 
     @app.get("/api/scans/{scan_id}/report")
     async def scan_report(scan_id: str) -> JSONResponse:
@@ -132,33 +168,7 @@ def create_app(store: Store | None = None, modules: list[Module] | None = None) 
     return app
 
 
-def tab_context(store: Store, scan: Scan, tab: str) -> dict[str, object]:
-    if tab == "summary":
-        roots = store.entities(scan.id, EntityType.DOMAIN)
-        root = roots[0].attributes if roots else {}
-        return {
-            "counts": {
-                "Subdominios": len(store.entities(scan.id, EntityType.SUBDOMAIN)),
-                "IPs": len(store.entities(scan.id, EntityType.IP)),
-                "Certificados": len(store.entities(scan.id, EntityType.CERTIFICATE)),
-            },
-            "rdap": root.get("rdap"),
-            "dns": root.get("dns"),
-            "emails": root.get("emails_in_certificates"),
-        }
-    if tab == "subdomains":
-        ips: dict[str, list[str]] = {}
-        for relation in store.relations(scan.id):
-            if relation.type is RelationType.RESOLVES_TO:
-                ips.setdefault(relation.from_ref.value, []).append(relation.to_ref.value)
-        return {
-            "subdomains": store.entities(scan.id, EntityType.SUBDOMAIN),
-            "ips": ips,
-            "first_seen": store.first_seen_anywhere(scan.id, EntityType.SUBDOMAIN),
-        }
-    return {}
-
-
 def main() -> None:
+    load_env_file()
     settings = Settings()
     uvicorn.run(create_app, factory=True, host=settings.host, port=settings.port)
