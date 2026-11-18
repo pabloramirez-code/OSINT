@@ -20,10 +20,10 @@ def test_depth_out_of_range_is_422(client: TestClient, depth: str) -> None:
 @pytest.fixture
 def client_with_key(store: Store) -> Iterator[TestClient]:
     modules = [
-        FakeModule("shodan", requires_key="SHODAN_API_KEY"),
+        FakeModule("grayhat", requires_key="GRAYHAT_API_KEY"),
         FakeModule("vt", requires_key="VIRUSTOTAL_API_KEY"),
     ]
-    app = create_app(store=store, modules=modules, keys={"SHODAN_API_KEY": FAKE_KEY})  # type: ignore[arg-type]
+    app = create_app(store=store, modules=modules, keys={"GRAYHAT_API_KEY": FAKE_KEY})  # type: ignore[arg-type]
     with TestClient(app) as client:
         yield client
 
@@ -32,7 +32,7 @@ def test_settings_never_shows_key_values(client_with_key: TestClient) -> None:
     page = client_with_key.get("/settings").text
     assert FAKE_KEY not in page
     assert FAKE_KEY[:8] not in page
-    assert "SHODAN_API_KEY" in page
+    assert "GRAYHAT_API_KEY" in page
     assert "Falta VIRUSTOTAL_API_KEY" in page
 
 

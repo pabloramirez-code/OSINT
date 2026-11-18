@@ -30,6 +30,7 @@ class Risk(StrEnum):
     HIGH = "alto"
     MEDIUM = "medio"
     LOW = "bajo"
+    UNKNOWN = "desconocido"
 
 
 @dataclass(frozen=True)
@@ -95,8 +96,50 @@ def assess(mail: dict[str, object], mta_policy: dict[str, object] | None = None)
             "Activa DNSSEC en el registrador y en el proveedor DNS.",
         ),
     ]
+    unresolved = _strings(mail.get("unresolved"))
+    checks = _mark_unresolved(checks, unresolved)
+    if {"SPF", "DMARC"} & set(unresolved):
+        return MailAssessment(
+            risk=Risk.UNKNOWN,
+            reasons=[
+                "No se pudo consultar SPF o DMARC a tiempo; el riesgo no se puede determinar. "
+                "Repite el escaneo o configura RECONMAP_DNS_SERVERS."
+            ],
+            checks=checks,
+        )
     risk, reasons = _risk(spf, dmarc)
     return MailAssessment(risk=risk, reasons=reasons, checks=checks)
+
+
+def _mark_unresolved(checks: list[Check], unresolved: list[str]) -> list[Check]:
+    """Un registro que no respondió a tiempo es "no comprobado", nunca "no existe"."""
+    controls = {label for label in unresolved if not label.startswith("DKIM:")}
+    if "SPF-includes" in controls:
+        controls.discard("SPF-includes")
+        checks = [c for c in checks if not (c.control == "SPF" and "consultas DNS" in c.summary)]
+        checks.append(
+            Check("SPF", Status.WARN, "No se pudieron contar las consultas DNS del SPF (timeout)")
+        )
+    result = [c for c in checks if c.control not in controls]
+    result += [
+        Check(
+            control,
+            Status.WARN,
+            "No se pudo consultar (tiempo de espera agotado): resultado no comprobado",
+            "Repite el escaneo; si persiste, revisa RECONMAP_DNS_SERVERS.",
+        )
+        for control in sorted(controls)
+    ]
+    dkim_timeouts = sum(label.startswith("DKIM:") for label in unresolved)
+    if dkim_timeouts:
+        result.append(
+            Check(
+                "DKIM",
+                Status.INFO,
+                f"{dkim_timeouts} selector(es) no se pudieron consultar (tiempo de espera agotado)",
+            )
+        )
+    return result
 
 
 def _risk(spf: list[str], dmarc: list[str]) -> tuple[Risk, list[str]]:
@@ -296,7 +339,13 @@ def _dkim_key_check(selector: str, record: str) -> Check:
         return Check("DKIM", Status.OK, f"Selector {selector}: clave Ed25519")
     bits = rsa_key_bits(key)
     if bits is None:
-        return Check("DKIM", Status.WARN, f"Selector {selector}: clave no interpretable")
+        return Check(
+            "DKIM",
+            Status.WARN,
+            f"Selector {selector}: clave mal formada (no es una clave RSA válida); "
+            "los receptores no podrán verificar las firmas hechas con ella",
+            "Vuelve a publicar la clave completa que da tu proveedor de correo.",
+        )
     if bits < 1024:
         return Check(
             "DKIM", Status.FAIL, f"Selector {selector}: RSA de {bits} bits (rompible)", "Usa 2048."

@@ -241,6 +241,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .risk-alto { border-left-color: var(--danger); }
 .risk-medio { border-left-color: var(--warning); }
 .risk-bajo { border-left-color: var(--ok); }
+.risk-desconocido { border-left-color: var(--muted); }
 .card.risk-alto .card-value { color: var(--danger); }
 .card.risk-medio .card-value { color: var(--warning); }
 .card.risk-bajo .card-value { color: var(--ok); }

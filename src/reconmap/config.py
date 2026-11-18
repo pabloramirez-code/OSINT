@@ -7,7 +7,6 @@ HTTP_TIMEOUT_SECONDS = 30.0
 MODULE_TIMEOUT_SECONDS = 120.0
 
 KNOWN_KEYS = (
-    "SHODAN_API_KEY",
     "VIRUSTOTAL_API_KEY",
     "GRAYHAT_API_KEY",
     "CERTSPOTTER_API_KEY",
@@ -28,6 +27,13 @@ class Settings:
     port: int = 8000
     max_hosts: int = field(default_factory=lambda: _env_int("RECONMAP_MAX_HOSTS", 300))
     wayback_limit: int = field(default_factory=lambda: _env_int("RECONMAP_WAYBACK_LIMIT", 1000))
+    dns_servers: tuple[str, ...] = field(
+        default_factory=lambda: tuple(
+            server.strip()
+            for server in os.environ.get("RECONMAP_DNS_SERVERS", "").split(",")
+            if server.strip()
+        )
+    )
 
 
 def load_env_file(path: Path = Path(".env")) -> None:

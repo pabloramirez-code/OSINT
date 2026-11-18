@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import timedelta
 
 import dns.asyncresolver
@@ -12,6 +12,7 @@ from reconmap.normalize import InvalidDomainError, normalize_domain
 from reconmap.scope import in_scope
 
 RECORD_TYPES = ("A", "AAAA", "MX", "NS", "TXT", "CNAME", "CAA")
+DNS_LIFETIME_SECONDS = 10.0
 
 Resolve = Callable[[str, str], Awaitable[list[str]]]
 
@@ -20,9 +21,25 @@ class NxDomainError(ModuleError):
     pass
 
 
-async def resolve_with_dnspython(name: str, record_type: str) -> list[str]:
-    answer = await dns.asyncresolver.resolve(name, record_type, lifetime=10)
-    return [record.to_text() for record in answer]
+def make_resolver(servers: Sequence[str] = ()) -> Resolve:
+    """Resolvedor DNS con un reintento ante timeout. Sin `servers` usa los del sistema;
+    con ellos (RECONMAP_DNS_SERVERS) ignora la configuración del sistema."""
+    resolver = dns.asyncresolver.Resolver(configure=not servers)
+    if servers:
+        resolver.nameservers = list(servers)
+
+    async def resolve(name: str, record_type: str) -> list[str]:
+        for attempt in range(2):
+            try:
+                answer = await resolver.resolve(name, record_type, lifetime=DNS_LIFETIME_SECONDS)
+            except dns.exception.Timeout:
+                if attempt:
+                    raise
+                continue
+            return [record.to_text() for record in answer]
+        raise AssertionError("unreachable")
+
+    return resolve
 
 
 class Dns:
@@ -34,8 +51,8 @@ class Dns:
     cache_ttl = timedelta(hours=1)
     rate_limit = 10.0
 
-    def __init__(self, resolve: Resolve = resolve_with_dnspython) -> None:
-        self._resolve = resolve
+    def __init__(self, resolve: Resolve | None = None) -> None:
+        self._resolve = resolve or make_resolver()
 
     async def run(self, entity: Entity, ctx: Context) -> ModuleResult:
         async def lookup_all() -> object:

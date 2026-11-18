@@ -52,14 +52,20 @@ class Context:
         self.requests[module.name] += 1
 
     async def cached(
-        self, module: Module, key: str, fetch: Callable[[], Awaitable[object]]
+        self,
+        module: Module,
+        key: str,
+        fetch: Callable[[], Awaitable[object]],
+        keep: Callable[[object], bool] | None = None,
     ) -> object:
+        """Devuelve el valor en caché o lo obtiene. `keep` decide si se guarda."""
         cache_key = f"{module.name}:{key}"
         hit = self.cache.get(cache_key)
         if hit is not MISSING:
             return hit
         value = await fetch()
-        self.cache.set(cache_key, value, module.cache_ttl)
+        if keep is None or keep(value):
+            self.cache.set(cache_key, value, module.cache_ttl)
         return value
 
     async def get_json(

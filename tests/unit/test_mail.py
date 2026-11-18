@@ -1,10 +1,11 @@
+import dns.exception
 import dns.resolver
 import pytest
 import respx
 
 from reconmap.mail_assessment import Risk, Status, assess, parse_tags, rsa_key_bits
 from reconmap.models import Entity, EntityType
-from reconmap.modules.base import Context
+from reconmap.modules.base import Context, ModuleError
 from reconmap.modules.dns import Resolve
 from reconmap.modules.mail import Mail, join_txt, redact_mailto
 from reconmap.modules.mta_sts import MtaSts, parse_policy
@@ -213,3 +214,65 @@ async def test_mta_sts_does_not_follow_redirects(ctx: Context) -> None:
     policy = result.entities[0].attributes["mta_sts_policy"]
     assert isinstance(policy, dict) and "redirección" in str(policy["error"])
     assert len(respx.calls) == 1
+
+
+# Timeouts de DNS
+
+
+def flaky_resolver(slow: set[str]) -> Resolve:
+    async def resolve(name: str, record_type: str) -> list[str]:
+        if name in slow:
+            raise dns.exception.Timeout
+        if name == "example.com" and record_type == "TXT":
+            return ['"v=spf1 -all"']
+        if name == "_dmarc.example.com":
+            return ['"v=DMARC1; p=reject"']
+        raise dns.resolver.NXDOMAIN
+
+    return resolve
+
+
+async def test_timeout_marks_record_unchecked_instead_of_failing(
+    ctx: Context, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Mail, "rate_limit", 1000.0)
+    slow = {"s2._domainkey.example.com", "_smtp._tls.example.com"}
+    data = (await Mail(flaky_resolver(slow)).run(ROOT, ctx)).entities[0].attributes["mail"]
+    assert isinstance(data, dict)
+    assert set(data["unresolved"]) == {"TLS-RPT", "DKIM:s2"}  # type: ignore[arg-type]
+    report = assess(data)
+    assert report.risk is Risk.LOW
+    tls = [c for c in report.checks if c.control == "TLS-RPT"]
+    assert len(tls) == 1 and "no comprobado" in tls[0].summary
+    assert any("1 selector(es) no se pudieron" in c.summary for c in report.checks)
+
+
+async def test_timeout_in_dmarc_makes_risk_unknown(
+    ctx: Context, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Mail, "rate_limit", 1000.0)
+    data = (await Mail(flaky_resolver({"_dmarc.example.com"})).run(ROOT, ctx)).entities[0]
+    mail = data.attributes["mail"]
+    assert isinstance(mail, dict)
+    assert assess(mail).risk is Risk.UNKNOWN
+
+
+async def test_partial_results_are_not_cached(
+    ctx: Context, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Mail, "rate_limit", 1000.0)
+    await Mail(flaky_resolver({"_dmarc.example.com"})).run(ROOT, ctx)
+    data = (await Mail(flaky_resolver(set())).run(ROOT, ctx)).entities[0].attributes["mail"]
+    assert isinstance(data, dict) and data["unresolved"] == []
+
+
+async def test_all_timeouts_is_a_module_error(
+    ctx: Context, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Mail, "rate_limit", 1000.0)
+
+    async def dead(name: str, record_type: str) -> list[str]:
+        raise dns.exception.Timeout
+
+    with pytest.raises(ModuleError, match="RECONMAP_DNS_SERVERS"):
+        await Mail(dead).run(ROOT, ctx)

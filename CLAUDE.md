@@ -371,8 +371,9 @@ Tareas:
       con límite configurable.
 - [ ] `modules/bgp.py`: IP → ASN → organización con RIPEstat (`network-info`
       y `as-overview`). BGPView descartado: no responde (nov. 2026).
-- [ ] `modules/shodan.py`: consulta por IP con `SHODAN_API_KEY` (sin
-      búsquedas por `hostname:`, que gastan créditos). Sin clave: no se ejecuta.
+- [x] ~~`modules/shodan.py`~~ **Eliminado** a petición del usuario: con plan
+      gratuito Shodan devuelve 403 en la mayoría de IPs. InternetDB (gratis,
+      sin clave) cubre puertos, etiquetas y CVEs.
 - [ ] `modules/certspotter.py` y `modules/hackertarget.py`: subdominios
       (comprobar condiciones y guardar fixture real antes).
 - [ ] Más adelante (aprobado por el usuario, sin fecha): VirusTotal,
@@ -684,3 +685,9 @@ uv run mypy src
     (regla 2). Tamaño de claves DKIM verificado contra `openssl` con claves reales.
   - El aviso de tope de hosts ya no muestra un número: el tope puede cambiar
     entre escaneos y el valor guardado no se conserva.
+  - DNS: `RECONMAP_DNS_SERVERS` (en `.env`) elige los resolvedores; vacío = los
+    del sistema. Cada consulta se reintenta una vez ante timeout. En la red del
+    usuario dos de sus tres resolvedores no responden (≈4 s por consulta).
+  - Correo: un registro que no responde a tiempo se marca "no comprobado"
+    (nunca "no existe"); si es SPF o DMARC, el riesgo queda "desconocido". Las
+    consultas incompletas no se guardan en caché.

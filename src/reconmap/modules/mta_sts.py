@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from reconmap.models import Contact, Entity, EntityType, ModuleResult
 from reconmap.modules.base import Context, ModuleError
-from reconmap.modules.dns import Resolve, resolve_with_dnspython
+from reconmap.modules.dns import Resolve, make_resolver
 from reconmap.modules.mail import dns_txt
 
 
@@ -18,8 +18,8 @@ class MtaSts:
     cache_ttl = timedelta(hours=1)
     rate_limit = 1.0
 
-    def __init__(self, resolve: Resolve = resolve_with_dnspython) -> None:
-        self._resolve = resolve
+    def __init__(self, resolve: Resolve | None = None) -> None:
+        self._resolve = resolve or make_resolver()
 
     async def run(self, entity: Entity, ctx: Context) -> ModuleResult:
         records = await dns_txt(self, self._resolve, f"_mta-sts.{entity.value}", ctx)

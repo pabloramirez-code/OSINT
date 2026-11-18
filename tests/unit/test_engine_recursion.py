@@ -77,15 +77,15 @@ async def test_host_limit_is_enforced_and_reported(store: Store) -> None:
 
 
 async def test_module_without_key_is_skipped(store: Store) -> None:
-    shodan = FakeModule("shodan", requires_key="SHODAN_API_KEY")
-    scan_id = await scan(store, [shodan, FakeModule("ok")])
+    keyed = FakeModule("vt", requires_key="VIRUSTOTAL_API_KEY")
+    scan_id = await scan(store, [keyed, FakeModule("ok")])
     progress = {run.module: run for run in store.get_scan(scan_id).progress}  # type: ignore[union-attr]
-    assert progress["shodan"].status is RunStatus.SKIPPED
-    assert progress["shodan"].error == "Falta SHODAN_API_KEY"
-    assert shodan.calls == 0
+    assert progress["vt"].status is RunStatus.SKIPPED
+    assert progress["vt"].error == "Falta VIRUSTOTAL_API_KEY"
+    assert keyed.calls == 0
 
-    await scan(store, [shodan], keys={"SHODAN_API_KEY": "x"})
-    assert shodan.calls == 1
+    await scan(store, [keyed], keys={"VIRUSTOTAL_API_KEY": "x"})
+    assert keyed.calls == 1
 
 
 async def test_partial_errors_do_not_fail_the_module(store: Store) -> None:

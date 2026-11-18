@@ -7,7 +7,7 @@ import dns.resolver
 
 from reconmap.models import Contact, Entity, EntityType, ModuleResult
 from reconmap.modules.base import Context, Module, ModuleError
-from reconmap.modules.dns import Resolve, resolve_with_dnspython
+from reconmap.modules.dns import Resolve, make_resolver
 
 # Selectores DKIM habituales (lista fija y acotada, ver CLAUDE.md Fase 2c).
 DKIM_SELECTORS = (
@@ -50,31 +50,51 @@ class Mail:
     cache_ttl = timedelta(hours=1)
     rate_limit = 10.0
 
-    def __init__(self, resolve: Resolve = resolve_with_dnspython) -> None:
-        self._resolve = resolve
+    def __init__(self, resolve: Resolve | None = None) -> None:
+        self._resolve = resolve or make_resolver()
 
     async def run(self, entity: Entity, ctx: Context) -> ModuleResult:
         async def collect() -> object:
             return await self._collect(entity.value, ctx)
 
-        data = await ctx.cached(self, entity.value, collect)
+        data = await ctx.cached(self, entity.value, collect, keep=_complete)
         return ModuleResult(
             entities=[Entity(type=EntityType.DOMAIN, value=entity.value, attributes={"mail": data})]
         )
 
     async def _collect(self, domain: str, ctx: Context) -> dict[str, object]:
+        unresolved: list[str] = []
+
+        async def lookup(label: str, name: str, record_type: str = "TXT") -> list[str]:
+            try:
+                if record_type == "TXT":
+                    return await self.txt(name, ctx)
+                return await self.query(name, record_type, ctx)
+            except ModuleError:
+                unresolved.append(label)
+                return []
+
         root_txt, mx, dmarc, mta_sts, tls_rpt, bimi, ds, *dkim = await asyncio.gather(
-            self.txt(domain, ctx),
-            self.query(domain, "MX", ctx),
-            self.txt(f"_dmarc.{domain}", ctx),
-            self.txt(f"_mta-sts.{domain}", ctx),
-            self.txt(f"_smtp._tls.{domain}", ctx),
-            self.txt(f"default._bimi.{domain}", ctx),
-            self.query(domain, "DS", ctx),
-            *(self.txt(f"{s}._domainkey.{domain}", ctx) for s in DKIM_SELECTORS),
+            lookup("SPF", domain),
+            lookup("MX", domain, "MX"),
+            lookup("DMARC", f"_dmarc.{domain}"),
+            lookup("MTA-STS", f"_mta-sts.{domain}"),
+            lookup("TLS-RPT", f"_smtp._tls.{domain}"),
+            lookup("BIMI", f"default._bimi.{domain}"),
+            lookup("DNSSEC", domain, "DS"),
+            *(lookup(f"DKIM:{s}", f"{s}._domainkey.{domain}") for s in DKIM_SELECTORS),
         )
+        if len(unresolved) == len(DKIM_SELECTORS) + 7:
+            raise ModuleError(
+                "Ninguna consulta DNS respondió a tiempo; revisa la red o RECONMAP_DNS_SERVERS"
+            )
         spf = [r for r in root_txt if r.lower().startswith("v=spf1")]
-        lookups = await self._spf_lookups(spf[0], ctx, {domain}) if len(spf) == 1 else 0
+        lookups = 0
+        if len(spf) == 1:
+            try:
+                lookups = await self._spf_lookups(spf[0], ctx, {domain})
+            except ModuleError:
+                unresolved.append("SPF-includes")
         return {
             "mx": mx,
             "spf": spf,
@@ -90,6 +110,7 @@ class Mail:
             "tls_rpt": [redact_mailto(r) for r in tls_rpt if r.lower().startswith("v=tlsrptv1")],
             "bimi": [r for r in bimi if r.lower().startswith("v=bimi1")],
             "dnssec": bool(ds),
+            "unresolved": unresolved,
         }
 
     async def query(self, name: str, record_type: str, ctx: Context) -> list[str]:
@@ -133,6 +154,11 @@ async def dns_query(
 
 async def dns_txt(module: Module, resolve: Resolve, name: str, ctx: Context) -> list[str]:
     return [join_txt(record) for record in await dns_query(module, resolve, name, "TXT", ctx)]
+
+
+def _complete(data: object) -> bool:
+    """Solo se cachea una consulta completa: lo que falló por timeout se reintenta."""
+    return isinstance(data, dict) and not data.get("unresolved")
 
 
 def redact_mailto(record: str) -> str:
