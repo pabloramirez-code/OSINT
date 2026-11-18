@@ -1,0 +1,28 @@
+{% set scan_labels = {"pending": "en cola", "running": "en curso", "done": "terminado", "failed": "fallido"} %}
+<div id="progress" class="panel progress"
+     {% if scan.is_active %}hx-get="/scans/{{ scan.id }}/progress" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+  <div class="scan-head">
+    <strong>{{ scan.target }}</strong>
+    <span class="muted">· {{ scan_labels[scan.status] }} · {{ "%02d:%02d"|format(scan.elapsed_seconds // 60, scan.elapsed_seconds % 60) }}</span>
+  </div>
+  {% for run in scan.progress %}
+    <div class="run run-{{ run.status }}">
+      <span class="run-label">{{ run.label }}</span>
+      <span class="bar"><span class="bar-fill" style="width: {{ (100 * run.done // run.total) if run.total else 0 }}%"></span></span>
+      <span class="run-status">
+        {% if run.status == "done" %}hecho{% if run.results %} ({{ run.results }}){% endif %}
+        {% elif run.status == "running" %}{{ run.done }}/{{ run.total }}
+        {% elif run.status == "failed" %}error: {{ run.error }}
+        {% elif run.status == "skipped" %}omitido{% if run.error %}: {{ run.error }}{% endif %}
+        {% else %}en cola{% endif %}
+      </span>
+    </div>
+  {% endfor %}
+  {% if not scan.is_active %}
+    <div hx-get="/scans/{{ scan.id }}/tabs/summary" hx-trigger="load" hx-target="#results"></div>
+  {% endif %}
+</div>
+{% if oob and not scan.is_active %}
+  {% include "partials/scan_form.html" %}
+  {% include "partials/history.html" %}
+{% endif %}

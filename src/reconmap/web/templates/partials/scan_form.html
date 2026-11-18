@@ -1,0 +1,16 @@
+<form id="scan-form" class="scan-form" action="/scans" method="post"
+      hx-post="/scans" hx-target="#form-error" hx-swap="innerHTML"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <div class="field">
+    <label for="domain" class="visually-hidden">Dominio</label>
+    <input id="domain" name="domain" type="text" placeholder="ejemplo.com"
+           autocomplete="off" spellcheck="false" required {{ "disabled" if busy }}>
+    <div id="form-error" aria-live="polite"></div>
+  </div>
+  <label class="depth" title="La recursión llega en la Fase 2">
+    Profundidad
+    <select name="depth" disabled>
+      <option value="1" selected>1</option>
+    </select>
+  </label>
+  <button type="submit" {{ "disabled" if busy }}>{{ "Escaneando…" if busy else "Escanear" }}</button>
+</form>

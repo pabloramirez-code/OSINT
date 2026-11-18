@@ -1,0 +1,44 @@
+{% extends "partials/tabs.html" %}
+{% set active = "summary" %}
+
+{% block tab %}
+<div class="cards">
+  {% for label, count in counts.items() %}
+    <div class="card"><span class="card-value">{{ count }}</span><span class="card-label">{{ label }}</span></div>
+  {% endfor %}
+</div>
+
+<div class="details">
+  <section class="panel">
+    <h3>Registro (RDAP)</h3>
+    {% if rdap %}
+      <dl>
+        <dt>Registrador</dt><dd>{{ rdap.registrar or "—" }}</dd>
+        <dt>Registrado</dt><dd>{{ (rdap.registered or "—")[:10] }}</dd>
+        <dt>Caduca</dt><dd>{{ (rdap.expires or "—")[:10] }}</dd>
+        <dt>Servidores DNS</dt><dd>{{ rdap.nameservers|join(", ") or "—" }}</dd>
+      </dl>
+    {% else %}
+      <p class="muted">Sin datos RDAP.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h3>DNS del dominio</h3>
+    {% if dns %}
+      <dl>
+        {% for record_type, values in dns.items() if values %}
+          <dt>{{ record_type }}</dt>
+          <dd>{% for value in values %}<code>{{ value }}</code>{% if not loop.last %}<br>{% endif %}{% endfor %}</dd>
+        {% endfor %}
+      </dl>
+    {% else %}
+      <p class="muted">Sin datos DNS.</p>
+    {% endif %}
+  </section>
+</div>
+
+{% if emails %}
+  <p class="muted">Los certificados mencionan {{ emails }} dirección(es) de correo. Solo se guarda el recuento.</p>
+{% endif %}
+{% endblock %}

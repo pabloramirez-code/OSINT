@@ -1,0 +1,21 @@
+{% set tabs = [
+  ("summary", "Resumen", true),
+  ("subdomains", "Subdominios", true),
+  ("ips", "IPs y puertos", false),
+  ("graph", "Grafo", false),
+  ("findings", "Hallazgos", false),
+  ("json", "JSON", true),
+] %}
+<nav class="tabs" role="tablist">
+  {% for key, label, enabled in tabs %}
+    {% if enabled %}
+      <button role="tab" class="tab{{ ' active' if key == active }}" aria-selected="{{ 'true' if key == active else 'false' }}"
+              hx-get="/scans/{{ scan.id }}/tabs/{{ key }}" hx-target="#results">{{ label }}</button>
+    {% else %}
+      <button role="tab" class="tab" disabled title="Próximamente">{{ label }}</button>
+    {% endif %}
+  {% endfor %}
+</nav>
+<div class="tab-body">
+  {% block tab %}{% endblock %}
+</div>

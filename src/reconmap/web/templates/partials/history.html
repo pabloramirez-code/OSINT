@@ -1,0 +1,11 @@
+{% set icons = {"pending": "○", "running": "●", "done": "✓", "failed": "✗"} %}
+<ul id="history" class="history"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% for item in history %}
+    <li class="status-{{ item.status }}">
+      <span class="icon" aria-label="{{ item.status }}">{{ icons[item.status] }}</span>
+      <a href="/scans/{{ item.id }}">{{ item.target }}</a>
+    </li>
+  {% else %}
+    <li class="muted">Sin escaneos todavía</li>
+  {% endfor %}
+</ul>

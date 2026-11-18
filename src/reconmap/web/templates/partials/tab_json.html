@@ -1,0 +1,7 @@
+{% extends "partials/tabs.html" %}
+{% set active = "json" %}
+
+{% block tab %}
+<p>Informe completo del escaneo: entidades, relaciones y progreso de cada módulo.</p>
+<a class="button" href="/api/scans/{{ scan.id }}/report" download>Descargar JSON</a>
+{% endblock %}

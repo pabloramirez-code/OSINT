@@ -1,0 +1,32 @@
+{% extends "partials/tabs.html" %}
+{% set active = "subdomains" %}
+
+{% block tab %}
+{% if subdomains %}
+  <input type="search" class="table-filter" placeholder="Filtrar subdominios…" data-filter="#subdomain-table">
+  <div class="table-wrap">
+    <table id="subdomain-table" class="data-table">
+      <thead>
+        <tr>
+          <th data-sort>Subdominio</th>
+          <th data-sort>IPs</th>
+          <th data-sort>Fuentes</th>
+          <th data-sort>Visto por primera vez</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sub in subdomains %}
+          <tr>
+            <td><code>{{ sub.value }}</code>{% if sub.attributes.wildcard %} <span class="tag">comodín</span>{% endif %}</td>
+            <td>{{ ips.get(sub.value, [])|join(", ") or "—" }}</td>
+            <td>{{ sub.sources|sort|join(", ") }}</td>
+            <td>{{ first_seen.get(sub.value, sub.first_seen).strftime("%Y-%m-%d") }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="muted">No se han encontrado subdominios.</p>
+{% endif %}
+{% endblock %}
