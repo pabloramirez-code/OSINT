@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def utcnow() -> datetime:
@@ -17,6 +17,7 @@ class EntityType(StrEnum):
     URL = "url"
     PORT = "port"
     CERTIFICATE = "certificate"
+    CANDIDATE = "candidate"
 
 
 class RelationType(StrEnum):
@@ -28,6 +29,12 @@ class RelationType(StrEnum):
     HAS_CERTIFICATE = "has_certificate"
     ARCHIVED_URL = "archived_url"
     CNAME_TO = "cname_to"
+
+
+class Contact(StrEnum):
+    PASSIVE = "passive"
+    LIGHT = "light"
+    ACTIVE = "active"
 
 
 class Severity(StrEnum):
@@ -44,6 +51,21 @@ class ScanStatus(StrEnum):
     FAILED = "failed"
 
 
+class RunStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class EntityRef(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    type: EntityType
+    value: str
+
+
 class Entity(BaseModel):
     type: EntityType
     value: str
@@ -52,13 +74,22 @@ class Entity(BaseModel):
     first_seen: datetime = Field(default_factory=utcnow)
     last_seen: datetime = Field(default_factory=utcnow)
 
+    @property
+    def ref(self) -> EntityRef:
+        return EntityRef(type=self.type, value=self.value)
+
 
 class Relation(BaseModel):
-    from_entity: Entity
+    from_ref: EntityRef
     type: RelationType
-    to_entity: Entity
-    source: str
+    to_ref: EntityRef
+    source: str = ""
     observed_at: datetime = Field(default_factory=utcnow)
+
+
+class ModuleResult(BaseModel):
+    entities: list[Entity] = Field(default_factory=list)
+    relations: list[Relation] = Field(default_factory=list)
 
 
 class Evidence(BaseModel):
@@ -69,7 +100,7 @@ class Evidence(BaseModel):
 class Finding(BaseModel):
     rule_id: str
     severity: Severity
-    entity: Entity
+    entity: EntityRef
     title: str
     evidence: list[Evidence] = Field(min_length=1)
     created_at: datetime = Field(default_factory=utcnow)
@@ -77,10 +108,12 @@ class Finding(BaseModel):
 
 class ModuleProgress(BaseModel):
     module: str
-    status: ScanStatus = ScanStatus.PENDING
+    label: str
+    status: RunStatus = RunStatus.PENDING
     done: int = 0
     total: int = 0
     results: int = 0
+    requests: int = 0
     error: str | None = None
 
 
@@ -88,8 +121,20 @@ class Scan(BaseModel):
     id: str
     target: str
     depth: int = Field(default=1, ge=1, le=3)
+    allow_light: bool = False
     status: ScanStatus = ScanStatus.PENDING
+    created_at: datetime = Field(default_factory=utcnow)
     started_at: datetime | None = None
     finished_at: datetime | None = None
     progress: list[ModuleProgress] = Field(default_factory=list)
-    errors: list[str] = Field(default_factory=list)
+
+    @property
+    def is_active(self) -> bool:
+        return self.status in {ScanStatus.PENDING, ScanStatus.RUNNING}
+
+    @property
+    def elapsed_seconds(self) -> int:
+        if self.started_at is None:
+            return 0
+        end = self.finished_at or utcnow()
+        return int((end - self.started_at).total_seconds())
