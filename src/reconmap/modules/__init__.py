@@ -5,6 +5,7 @@ from reconmap.modules.certspotter import CertSpotter
 from reconmap.modules.crtsh import CrtSh
 from reconmap.modules.dns import Dns, make_resolver
 from reconmap.modules.hackertarget import HackerTarget
+from reconmap.modules.headers import Headers
 from reconmap.modules.internetdb import InternetDb
 from reconmap.modules.mail import Mail
 from reconmap.modules.mta_sts import MtaSts
@@ -23,6 +24,7 @@ def default_modules(settings: Settings | None = None) -> list[Module]:
         Rdap(),
         Mail(resolve),
         MtaSts(resolve),
+        Headers(resolve, max_hosts=settings.max_light_hosts),
         Wayback(limit=settings.wayback_limit),
         InternetDb(),
         Bgp(),

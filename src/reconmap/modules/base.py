@@ -42,6 +42,7 @@ class Context:
     target: str
     keys: Mapping[str, str] = field(default_factory=dict)
     requests: Counter[str] = field(default_factory=Counter)
+    counters: Counter[str] = field(default_factory=Counter)
 
     def key(self, module: Module) -> str:
         if module.requires_key is None or module.requires_key not in self.keys:

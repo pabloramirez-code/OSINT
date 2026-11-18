@@ -47,3 +47,27 @@ def test_mail_tab_without_data(client: TestClient, store: Store) -> None:
     scan = store.create_scan("example.com")
     store.update_scan(scan.id, status=ScanStatus.DONE)
     assert "no incluye datos de correo" in client.get(f"/scans/{scan.id}/tabs/mail").text
+
+
+def test_web_tab_passive_scan_explains_light_mode(client: TestClient, store: Store) -> None:
+    scan = store.create_scan("example.com")
+    store.update_scan(scan.id, status=ScanStatus.DONE)
+    page = client.get(f"/scans/{scan.id}/tabs/web").text
+    assert "modo" in page and "ligero" in page
+
+
+def test_web_tab_escapes_header_values(client: TestClient, store: Store) -> None:
+    scan = store.create_scan("example.com", allow_light=True)
+    store.update_scan(scan.id, status=ScanStatus.DONE)
+    data = {
+        "https": {"status": 200, "headers": {"server": f"Apache/2.4 {XSS}"}, "cookies": []},
+        "http": {"error": "No responde"},
+    }
+    store.upsert_entity(
+        scan.id,
+        Entity(type=EntityType.DOMAIN, value="example.com", attributes={"http_headers": data}),
+        "headers",
+    )
+    page = client.get(f"/scans/{scan.id}/tabs/web").text
+    assert "example.com" in page and "Revela la versión" in page
+    assert XSS not in page

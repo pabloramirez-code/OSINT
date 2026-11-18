@@ -3,6 +3,8 @@
 from collections import defaultdict
 from dataclasses import dataclass
 
+from reconmap.checks import SEVERITY_ORDER, Status
+from reconmap.headers_assessment import assess_host
 from reconmap.mail_assessment import RISK_CRITERIA, MailAssessment, assess
 from reconmap.models import EntityType, RelationType, Scan
 from reconmap.store import Store
@@ -102,6 +104,18 @@ def mail(store: Store, scan: Scan) -> dict[str, object]:
         "records": root["mail"],
         "allow_light": scan.allow_light,
     }
+
+
+def web(store: Store, scan: Scan) -> dict[str, object]:
+    hosts = [
+        e
+        for e in store.entities(scan.id)
+        if e.type in {EntityType.DOMAIN, EntityType.SUBDOMAIN}
+        and isinstance(e.attributes.get("http_headers"), dict)
+    ]
+    reports = [assess_host(e.value, e.attributes["http_headers"]) for e in hosts]  # type: ignore[arg-type]
+    reports.sort(key=lambda r: (SEVERITY_ORDER[r.worst], r.host))
+    return {"reports": reports, "allow_light": scan.allow_light, "Status": Status}
 
 
 def _assessment(root: dict[str, object]) -> MailAssessment:

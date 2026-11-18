@@ -26,6 +26,7 @@ class Settings:
     host: str = "127.0.0.1"
     port: int = 8000
     max_hosts: int = field(default_factory=lambda: _env_int("RECONMAP_MAX_HOSTS", 300))
+    max_light_hosts: int = field(default_factory=lambda: _env_int("RECONMAP_MAX_LIGHT_HOSTS", 50))
     wayback_limit: int = field(default_factory=lambda: _env_int("RECONMAP_WAYBACK_LIMIT", 1000))
     dns_servers: tuple[str, ...] = field(
         default_factory=lambda: tuple(

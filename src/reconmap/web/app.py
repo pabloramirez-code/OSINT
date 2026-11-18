@@ -22,7 +22,7 @@ from reconmap.store import Store
 from reconmap.web import views
 
 WEB_DIR = Path(__file__).parent
-TABS = {"summary", "subdomains", "ips", "mail", "json"}
+TABS = {"summary", "subdomains", "ips", "mail", "web", "json"}
 
 templates = Jinja2Templates(
     env=Environment(loader=FileSystemLoader(WEB_DIR / "templates"), autoescape=True)
@@ -156,6 +156,8 @@ def create_app(
             return views.ips(store, scan)
         if tab == "mail":
             return views.mail(store, scan)
+        if tab == "web":
+            return views.web(store, scan)
         return {}
 
     @app.get("/settings", response_class=HTMLResponse)

@@ -42,10 +42,9 @@
         <span class="mode-badge">Requiere tu autorización</span>
         <h3>Ligero</h3>
         <p class="mode-claim">Como visitar su web una vez.</p>
-        <p>Como mucho una petición por host, sin seguir enlaces ni salir del dominio. Solo se activa si eliges <strong>Ligero</strong> al lanzar el escaneo.</p>
+        <p>Como mucho 3 peticiones por web (HTTPS, HTTP y, si el certificado falla, HTTPS otra vez), sin seguir enlaces ni redirecciones. Solo se activa si eliges <strong>Ligero</strong> al lanzar el escaneo.</p>
         <p class="mode-modules">
-          {% if light %}{{ light|map(attribute="label")|join(", ") }}.{% endif %}
-          Próximamente: cabeceras de seguridad HTTP.
+          {% if light %}{{ light|length }} fuentes: {{ light|map(attribute="label")|join(", ") }}.{% endif %}
         </p>
       </article>
       <article class="mode mode-active">

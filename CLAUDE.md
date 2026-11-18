@@ -34,11 +34,15 @@ vectores de ataque. **Observa y marca.**
 1. **Tres niveles de contacto.** Cada módulo declara
    `contact ∈ {passive, light, active}`.
    - `passive`: solo consulta fuentes de terceros. Siempre permitido.
-   - `light`: peticiones equivalentes a una visita normal con navegador
-     (GET/HEAD a la portada HTTPS del dominio y de sus subdominios en ámbito,
-     como máximo 1 por host y escaneo, sin seguir enlaces). **Desactivado por
-     defecto.** Se activa en cada escaneo con una casilla de confirmación
-     ("Tengo autorización o es un dominio mío") que queda guardada en el `Scan`.
+   - `light`: peticiones equivalentes a una visita normal con navegador a la
+     portada del dominio y de sus subdominios en ámbito: **como máximo 3 por
+     host y escaneo** (HTTPS, HTTP para ver si redirige a HTTPS y, solo si el
+     certificado no es válido, HTTPS otra vez sin verificar para leer las
+     cabeceras; aprobado por el usuario el 2026-11-18). Sin seguir enlaces ni
+     redirecciones y sin leer el cuerpo. Tope de 50 hosts por escaneo
+     (`RECONMAP_MAX_LIGHT_HOSTS`). **Desactivado por defecto.** Se activa en
+     cada escaneo eligiendo el modo «Ligero» ("Tengo autorización o es un
+     dominio mío"), que queda guardado en el `Scan`.
    - `active`: cualquier otra cosa (puertos, rutas, fuzzing). Prohibido hasta
      la Fase 5.
 2. **Solo infraestructura, nunca personas.** No se recogen, guardan ni
@@ -451,13 +455,16 @@ romper las reglas 1–3.
 
 Tareas:
 - [x] Casilla de autorización: adelantada a la Fase 2c.
-- [ ] `modules/headers.py` (`light`): un GET a `https://{host}/` por host en
-      ámbito; guarda cabeceras de seguridad (HSTS, CSP, X-Frame-Options,
-      X-Content-Type-Options, Referrer-Policy, Permissions-Policy) y `Server`.
-      Sustituye a securityheaders.com (su API se retiró en 2026).
-- [ ] `modules/buckets.py` (GrayHatWarfare, `GRAYHAT_API_KEY`): solo el
-      endpoint de buckets, buscando la etiqueta principal del dominio. Guarda
-      entidades `candidate` (nombre del bucket, proveedor, nº de archivos).
+- [x] `modules/headers.py` (`light`) + `headers_assessment.py` + pestaña Web:
+      HSTS, CSP, clickjacking, nosniff, Referrer-Policy, Permissions-Policy,
+      revelación de versiones, X-XSS-Protection, cookies (solo nombre y
+      atributos), certificado y paso de HTTP a HTTPS. Si HTTPS redirige, solo
+      se evalúa HSTS en ese host. Probado contra example.com y badssl.com.
+- [ ] ~~`modules/buckets.py`~~ **En pausa:** con plan gratuito, la API de
+      GrayHatWarfare devuelve 0 buckets siempre ("As a free user you can list
+      0 … buckets"). Decisión pendiente del usuario. Diseño acordado si se
+      retoma: palabra principal del dominio si tiene ≥5 letras + palabras
+      clave manuales; entidades `candidate` (nombre, proveedor, nº archivos).
       Autenticación: cabecera `Authorization: Bearer <token>`; en `.env` se
       guarda solo el token (sin la palabra `Bearer`) y el módulo la añade.
 - [ ] Pestaña o sección "Candidatos no atribuidos".

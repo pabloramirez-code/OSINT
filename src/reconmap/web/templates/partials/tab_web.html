@@ -1,0 +1,51 @@
+{% extends "partials/tabs.html" %}
+{% set active = "web" %}
+{% set status_labels = {"ok": "Correcto", "warn": "Mejorable", "fail": "Problema", "info": "Info"} %}
+
+{% block tab %}
+{% if reports %}
+  <p class="muted">Cabeceras de seguridad de cada web según OWASP Secure Headers. Ordenadas de peor a mejor.</p>
+  <div class="host-list">
+    {% for report in reports %}
+      <details class="host-report host-{{ report.worst }}"{% if loop.first %} open{% endif %}>
+        <summary>
+          <code>{{ report.host }}</code>
+          <span class="host-counts">
+            {% if report.note %}<span class="badge badge-info">No analizado</span>{% endif %}
+            {% for status in (Status.FAIL, Status.WARN) %}
+              {% if report.count(status) %}<span class="badge badge-{{ status }}">{{ report.count(status) }} {{ status_labels[status]|lower }}</span>{% endif %}
+            {% endfor %}
+            {% if not report.note and not report.count(Status.FAIL) and not report.count(Status.WARN) %}<span class="badge badge-ok">Sin problemas</span>{% endif %}
+          </span>
+        </summary>
+        {% if report.note %}
+          <p class="muted">{{ report.note }}</p>
+        {% else %}
+          <div class="table-wrap">
+            <table class="data-table checks">
+              <thead><tr><th>Control</th><th>Estado</th><th>Detalle</th><th>Recomendación</th></tr></thead>
+              <tbody>
+                {% for check in report.checks %}
+                  <tr>
+                    <td class="nowrap">{{ check.control }}</td>
+                    <td class="nowrap"><span class="badge badge-{{ check.status }}">{{ status_labels[check.status] }}</span></td>
+                    <td>{{ check.summary }}</td>
+                    <td class="muted">{{ check.advice or "—" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      </details>
+    {% endfor %}
+  </div>
+{% elif not allow_light %}
+  <section class="panel empty">
+    <p>Este escaneo se hizo en modo <span class="pill pill-passive">pasivo</span>: no se contactó con ninguna web del objetivo.</p>
+    <p class="muted">Para analizar las cabeceras HTTP, lanza el escaneo en modo <span class="pill pill-light">ligero</span> (solo si tienes autorización o es tu dominio).</p>
+  </section>
+{% else %}
+  <p class="muted">Ningún host respondió a la comprobación de cabeceras.</p>
+{% endif %}
+{% endblock %}

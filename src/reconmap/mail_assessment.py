@@ -9,6 +9,8 @@ import binascii
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from reconmap.checks import Check, Status
+
 MAX_SPF_LOOKUPS = 10
 
 RISK_CRITERIA = (
@@ -19,26 +21,11 @@ RISK_CRITERIA = (
 )
 
 
-class Status(StrEnum):
-    OK = "ok"
-    WARN = "warn"
-    FAIL = "fail"
-    INFO = "info"
-
-
 class Risk(StrEnum):
     HIGH = "alto"
     MEDIUM = "medio"
     LOW = "bajo"
     UNKNOWN = "desconocido"
-
-
-@dataclass(frozen=True)
-class Check:
-    control: str
-    status: Status
-    summary: str
-    advice: str = ""
 
 
 @dataclass(frozen=True)
