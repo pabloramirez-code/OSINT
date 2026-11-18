@@ -31,16 +31,27 @@ vectores de ataque. **Observa y marca.**
 
 ## 2. Reglas innegociables (Claude Code: no las rompas nunca)
 
-1. **Pasivo por defecto.** Ningún módulo envía tráfico al objetivo salvo que esté
-   marcado como `active = True` Y el usuario lo haya habilitado explícitamente
-   con confirmación de autorización. Hasta la Fase 5 **no existe ningún módulo
-   activo**.
+1. **Tres niveles de contacto.** Cada módulo declara
+   `contact ∈ {passive, light, active}`.
+   - `passive`: solo consulta fuentes de terceros. Siempre permitido.
+   - `light`: peticiones equivalentes a una visita normal con navegador
+     (GET/HEAD a la portada HTTPS del dominio y de sus subdominios en ámbito,
+     como máximo 1 por host y escaneo, sin seguir enlaces). **Desactivado por
+     defecto.** Se activa en cada escaneo con una casilla de confirmación
+     ("Tengo autorización o es un dominio mío") que queda guardada en el `Scan`.
+   - `active`: cualquier otra cosa (puertos, rutas, fuzzing). Prohibido hasta
+     la Fase 5.
 2. **Solo infraestructura, nunca personas.** No se recogen, guardan ni
    correlacionan datos personales. Si una fuente devuelve emails, se guarda solo
-   el recuento por dominio.
+   el recuento por dominio. De los índices de filtraciones o buckets **nunca**
+   se guardan nombres ni contenidos de archivos; solo el nombre del bucket, el
+   proveedor y el número de archivos.
 3. **Ámbito controlado.** La recursión solo sigue el dominio objetivo y sus
    subdominios. IPs y ASNs se registran pero **no** se usan para saltar a otros
-   dominios.
+   dominios. Los resultados obtenidos por **búsqueda por palabra clave** (no por
+   dominio exacto) se guardan como entidad `candidate`, se muestran como "no
+   atribuido, verificar a mano" y **nunca** se reencolan ni generan hallazgos
+   de severidad mayor que `info`.
 4. **Secretos fuera del repo.** Claves solo en `.env` (en `.gitignore`). Existe
    `.env.example` con las claves vacías. Nunca mostrar claves en logs ni en la
    interfaz.
@@ -71,6 +82,7 @@ vectores de ataque. **Observa y marca.**
 | Interactividad | **HTMX** (CDN) + JavaScript mínimo | sin framework de frontend ni build |
 | Grafo | **Cytoscape.js** (CDN) | grafos interactivos |
 | Estilos | CSS propio en un archivo, tema oscuro | sin frameworks CSS |
+| Formularios | `python-multipart` | FastAPI lo necesita para leer formularios |
 | HTTP saliente | `httpx` (async) | |
 | DNS | `dnspython` | |
 | Modelos | `pydantic` v2 | |
@@ -88,14 +100,15 @@ vectores de ataque. **Observa y marca.**
 ### 4.1 Entidades y relaciones
 
 ```
-Entity: type ∈ {domain, subdomain, ip, asn, org, url, port, certificate}
+Entity: type ∈ {domain, subdomain, ip, asn, org, url, port, certificate,
+               candidate}
         value (normalizado), first_seen, last_seen, sources[]
 Relation: (from) --type--> (to), source, observed_at
           type ∈ {has_subdomain, resolves_to, belongs_to_asn, owned_by,
                   exposes_port, has_certificate, archived_url, cname_to}
 Finding: rule_id, severity ∈ {info, low, medium, high}, entity,
          title, evidence (fuente + dato bruto), created_at
-Scan:    id, target, depth, status ∈ {pending, running, done, failed},
+Scan:    id, target, depth, allow_light, status ∈ {pending, running, done, failed},
          started_at, finished_at, progreso por módulo, errores
 ```
 
@@ -109,7 +122,7 @@ class Module(Protocol):
     name: str                      # "crtsh"
     label: str                     # "Certificate Transparency" (para la interfaz)
     accepts: set[EntityType]
-    active: bool
+    contact: Contact               # passive | light | active
     requires_key: str | None
     cache_ttl: timedelta
     rate_limit: float
@@ -241,7 +254,8 @@ Tareas:
 - [ ] `pyproject.toml` con dependencias, config de ruff, mypy y marcadores
       `network` y `e2e` registrados en pytest.
 - [ ] `.gitignore` (`.env`, `*.db`, `__pycache__`, `.venv`).
-- [ ] `.env.example` con `SHODAN_API_KEY=` y `VIRUSTOTAL_API_KEY=` vacías.
+- [x] `.env.example` con `SHODAN_API_KEY=` y `VIRUSTOTAL_API_KEY=` vacías
+      (`GRAYHAT_API_KEY=` añadida en Fase 1).
 - [ ] `models.py`, `normalize.py`.
 - [ ] `web/app.py` con `GET /` que sirve `index.html` (cabecera, campo de
       dominio deshabilitado, barra lateral vacía) y `GET /health`.
@@ -315,7 +329,8 @@ Tests que deben pasar (sin red, con `respx`):
 - [ ] Caché: segunda llamada en TTL no hace petición; TTL vencido sí.
 - [ ] Store: misma entidad desde dos fuentes → una fila con las dos fuentes.
 - [ ] Motor: un módulo que lanza excepción no impide los otros.
-- [ ] Motor: rechaza un módulo `active=True` (módulo falso de prueba).
+- [ ] Motor: rechaza un módulo `contact=active`, y uno `light` si el escaneo
+      no tiene `allow_light` (módulos falsos de prueba).
 - [ ] Web: `POST /scans` válido → redirección a `/scans/{id}`.
 - [ ] Web: `POST /scans` con `"<script>alert(1)</script>"` → 422 y el
       texto aparece escapado en la respuesta.
@@ -353,6 +368,10 @@ Tareas:
       `http://web.archive.org/cdx/search/cdx?url=*.{dominio}/*&output=json&fl=original&collapse=urlkey`
       con límite configurable.
 - [ ] `modules/bgp.py`: IP → ASN → organización (RIPEstat o BGPView).
+- [ ] `modules/shodan.py`: consulta por IP con `SHODAN_API_KEY` (sin
+      búsquedas por `hostname:`, que gastan créditos). Sin clave: no se ejecuta.
+- [ ] `modules/certspotter.py` y `modules/hackertarget.py`: subdominios
+      (comprobar condiciones y guardar fixture real antes).
 - [ ] `scope.py`: `in_scope(entity, target)`.
 - [ ] Motor v2: cola con `max_depth` (1 por defecto, máximo 3) y visitadas.
 - [ ] Interfaz: selector de profundidad; pestaña **IPs y puertos**; las
@@ -377,6 +396,36 @@ Revisión manual:
 - [ ] Escaneo con profundidad 2 un dominio mediano; anoto cuánto tarda.
 - [ ] En la pestaña IPs no aparece nada raro fuera de mi objetivo.
 - [ ] Ajustes muestra bien qué falta configurar.
+
+---
+
+### Fase 2b — Contacto ligero y buckets
+
+**Objetivo:** añadir el nivel `light` y las fuentes que lo necesitan, sin
+romper las reglas 1–3.
+
+Tareas:
+- [ ] Casilla "Tengo autorización o es un dominio mío" en el formulario;
+      se guarda como `allow_light` en el `Scan`.
+- [ ] `modules/headers.py` (`light`): un GET a `https://{host}/` por host en
+      ámbito; guarda cabeceras de seguridad (HSTS, CSP, X-Frame-Options,
+      X-Content-Type-Options, Referrer-Policy, Permissions-Policy) y `Server`.
+      Sustituye a securityheaders.com (su API se retiró en 2026).
+- [ ] `modules/buckets.py` (GrayHatWarfare, `GRAYHAT_API_KEY`): solo el
+      endpoint de buckets, buscando la etiqueta principal del dominio. Guarda
+      entidades `candidate` (nombre del bucket, proveedor, nº de archivos).
+- [ ] Pestaña o sección "Candidatos no atribuidos".
+
+Tests que deben pasar:
+- [ ] `headers` no se ejecuta si `allow_light` es falso.
+- [ ] `headers` hace como máximo una petición por host y no sigue
+      redirecciones fuera del ámbito.
+- [ ] `buckets` nunca guarda nombres de archivos (fixture con archivos).
+- [ ] Las entidades `candidate` no se reencolan.
+
+Revisión manual:
+- [ ] Sin marcar la casilla, ningún log muestra peticiones a mi dominio.
+- [ ] Los candidatos se ven claramente como "no atribuidos".
 
 ---
 
@@ -477,7 +526,7 @@ Tareas:
 - [ ] Acceso **solo** por Tailscale; añadir autenticación básica (usuario y
       contraseña desde Secret) antes de exponerlo fuera de `localhost`.
 - [ ] (Opcional) ArgoCD apuntando a `deploy/k8s/`.
-- [ ] (Opcional) Módulos activos solo para infraestructura propia: lista
+- [ ] (Opcional) Módulos `active` solo para infraestructura propia: lista
       blanca de dominios en configuración + casilla de confirmación de
       autorización en la interfaz.
 
@@ -538,13 +587,25 @@ uv run mypy src
 
 ## 9. Estado actual
 
-- Fase actual: **0 — Esqueleto**
-- Última tarea completada: Fase 0 completa (tests, ruff y mypy en verde).
-- Pendiente de revisión manual: checklist de la Fase 0.
+- Fase actual: **1 — MVP** (implementada; pendiente de revisión manual).
+- Última tarea completada: Fase 1 completa (1A núcleo + 1B interfaz + CLI).
+  56 tests sin red, ruff y mypy en verde. Tests `-m network`: RDAP y DNS OK;
+  crt.sh devolvió 502 en una ejecución (inestabilidad conocida de crt.sh).
+- Pendiente de revisión manual: checklist de la Fase 0 ✔; checklist de la Fase 1.
 - Notas:
-  - `normalize_domain` devuelve `Domain(name, wildcard)` (NamedTuple) para
-    cubrir a la vez el caso normal y el comodín con un solo tipo.
-  - Corregido el valor esperado de `señal.es`: es `xn--seal-hqa.es`.
+  - `normalize_domain` devuelve `Domain(name, wildcard)` (NamedTuple).
   - IDNA con el códec estándar de Python (IDNA 2003), sin dependencia extra.
-  - Fase 1 necesitará `python-multipart` (FastAPI lo exige para leer
-    formularios): pedir aprobación antes de añadirlo.
+  - Reglas 1–3 ampliadas (niveles de contacto, buckets, candidatos) y nueva
+    Fase 2b, aprobadas por el usuario. Detalle en `docs/propuesta-fuentes.md`.
+  - crt.sh devuelve también emails y textos que no son dominios en
+    `name_value`: los emails solo se cuentan (`emails_in_certificates`) y el
+    resto se descarta al normalizar.
+  - Test XSS de la tabla: el parser descarta `<img …>` por no ser un dominio,
+    así que el test inyecta la entidad directamente en el store y comprueba el
+    escape en la plantilla (defensa en profundidad).
+  - `get_json` reintenta una vez ante 5xx/timeout (crt.sh falla a menudo).
+  - Caché persistente en SQLite (tabla `cache`), compartida entre web y CLI.
+  - Al arrancar, los escaneos que quedaron `running` se marcan `failed`.
+  - El selector de profundidad está fijo en 1 hasta la Fase 2.
+  - Aviso pendiente: Starlette sugiere `httpx2` para TestClient (no está en el
+    stack; no se ha añadido).
