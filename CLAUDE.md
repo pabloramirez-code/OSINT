@@ -1,0 +1,550 @@
+# reconmap — Orquestador de reconocimiento pasivo con interfaz gráfica
+
+> Este archivo es la fuente de verdad del proyecto. Claude Code: léelo entero al
+> empezar cada sesión, mira la sección **Estado actual** y continúa desde ahí.
+
+## 1. Qué es el proyecto
+
+Una **aplicación web con interfaz gráfica**: el usuario escribe un **dominio** en
+el navegador, pulsa "Escanear" y la aplicación:
+
+1. Consulta en paralelo fuentes públicas de OSINT de infraestructura (crt.sh, DNS,
+   RDAP, Shodan InternetDB, Wayback Machine, BGP…).
+2. Muestra el progreso en directo y los resultados en pestañas (resumen,
+   subdominios, IPs y puertos, grafo, hallazgos).
+3. Guarda todo como un **grafo de entidades** (dominio → subdominios → IPs → ASN →
+   organización) y lo dibuja de forma interactiva.
+4. Aplica un **motor de reglas** que marca *findings* objetivos y defendibles.
+5. Al final, se despliega en un clúster **k3s** y se usa desde el móvil por
+   Tailscale.
+
+La **interfaz gráfica es el producto**. Existe también un CLI, pero es una
+herramienta secundaria para depurar y automatizar.
+
+Plazo objetivo: 6 semanas. Proyecto de portfolio para puestos junior de
+sistemas / ciberseguridad.
+
+**Lo que NO es:** no es un escáner de vulnerabilidades, no ataca, no "predice"
+vectores de ataque. **Observa y marca.**
+
+---
+
+## 2. Reglas innegociables (Claude Code: no las rompas nunca)
+
+1. **Pasivo por defecto.** Ningún módulo envía tráfico al objetivo salvo que esté
+   marcado como `active = True` Y el usuario lo haya habilitado explícitamente
+   con confirmación de autorización. Hasta la Fase 5 **no existe ningún módulo
+   activo**.
+2. **Solo infraestructura, nunca personas.** No se recogen, guardan ni
+   correlacionan datos personales. Si una fuente devuelve emails, se guarda solo
+   el recuento por dominio.
+3. **Ámbito controlado.** La recursión solo sigue el dominio objetivo y sus
+   subdominios. IPs y ASNs se registran pero **no** se usan para saltar a otros
+   dominios.
+4. **Secretos fuera del repo.** Claves solo en `.env` (en `.gitignore`). Existe
+   `.env.example` con las claves vacías. Nunca mostrar claves en logs ni en la
+   interfaz.
+5. **Respeto a las fuentes.** Toda petición pasa por caché + rate limiter.
+6. **Todo lo que viene de fuera se escapa.** Los datos de las fuentes (nombres de
+   certificados, URLs del Wayback, banners) son texto no fiable: la interfaz
+   **nunca** los inserta como HTML. Plantillas con autoescape, y en JavaScript
+   `textContent`, nunca `innerHTML` con datos externos.
+7. **Solo local por defecto.** El servidor escucha en `127.0.0.1`. Exponerlo
+   requiere un cambio consciente de configuración (y en Fase 5, solo detrás de
+   Tailscale).
+8. **Tests sin red.** La suite normal no hace peticiones reales. Las pruebas
+   contra servicios reales llevan `@pytest.mark.network`.
+9. **No avanzar de fase** sin que pasen todos los tests **y** el usuario haya
+   marcado su checklist de revisión manual.
+10. **Preguntar antes** de añadir una dependencia que no esté en la sección 3.
+
+---
+
+## 3. Stack
+
+| Pieza | Elección | Motivo |
+|---|---|---|
+| Lenguaje | Python 3.12 | |
+| Gestor de proyecto | `uv` | rápido, lockfile |
+| Servidor web | `FastAPI` + `uvicorn` | API y páginas en el mismo proceso |
+| Plantillas | `Jinja2` (autoescape activado) | HTML generado en servidor |
+| Interactividad | **HTMX** (CDN) + JavaScript mínimo | sin framework de frontend ni build |
+| Grafo | **Cytoscape.js** (CDN) | grafos interactivos |
+| Estilos | CSS propio en un archivo, tema oscuro | sin frameworks CSS |
+| HTTP saliente | `httpx` (async) | |
+| DNS | `dnspython` | |
+| Modelos | `pydantic` v2 | |
+| CLI secundario | `typer` + `rich` | |
+| Persistencia | SQLite (`sqlite3` estándar) | |
+| Tests | `pytest`, `pytest-asyncio`, `respx`, `TestClient` de FastAPI | |
+| Calidad | `ruff`, `mypy` | |
+| E2E (opcional, Fase 3+) | `playwright` | probar la interfaz en un navegador real |
+| Despliegue (Fase 5) | Docker, k3s, (opcional) ArgoCD | |
+
+---
+
+## 4. Arquitectura
+
+### 4.1 Entidades y relaciones
+
+```
+Entity: type ∈ {domain, subdomain, ip, asn, org, url, port, certificate}
+        value (normalizado), first_seen, last_seen, sources[]
+Relation: (from) --type--> (to), source, observed_at
+          type ∈ {has_subdomain, resolves_to, belongs_to_asn, owned_by,
+                  exposes_port, has_certificate, archived_url, cname_to}
+Finding: rule_id, severity ∈ {info, low, medium, high}, entity,
+         title, evidence (fuente + dato bruto), created_at
+Scan:    id, target, depth, status ∈ {pending, running, done, failed},
+         started_at, finished_at, progreso por módulo, errores
+```
+
+Normalización de dominios: minúsculas, sin punto final, IDNA (punycode), sin
+`*.` (el comodín se guarda como atributo).
+
+### 4.2 Contrato de un módulo
+
+```python
+class Module(Protocol):
+    name: str                      # "crtsh"
+    label: str                     # "Certificate Transparency" (para la interfaz)
+    accepts: set[EntityType]
+    active: bool
+    requires_key: str | None
+    cache_ttl: timedelta
+    rate_limit: float
+
+    async def run(self, entity: Entity, ctx: Context) -> ModuleResult: ...
+```
+
+El **motor** no conoce ninguna fuente concreta. Ejecuta módulos en paralelo,
+guarda resultados, actualiza el progreso del `Scan` en la base de datos (la
+interfaz lo lee de ahí) y reencola entidades en ámbito hasta `max_depth`.
+
+Añadir una fuente = un archivo en `modules/` + tests. Cero cambios en motor o
+interfaz: la interfaz lista los módulos dinámicamente.
+
+### 4.3 Cómo se comunican interfaz y motor
+
+- `POST /scans` crea el escaneo y lo lanza como tarea en segundo plano.
+- La página del escaneo hace **polling con HTMX cada 1 s** a un fragmento de
+  progreso mientras `status` sea `pending/running`; al terminar deja de
+  preguntar y carga los resultados. (Polling, no WebSockets: más simple y
+  suficiente.)
+- Las pestañas de resultados son fragmentos HTML que HTMX carga bajo demanda.
+- El grafo pide `GET /api/scans/{id}/graph` (JSON) y lo dibuja Cytoscape.js.
+- Máximo **1 escaneo en marcha** a la vez.
+
+### 4.4 Diseño de la interfaz
+
+```
+┌──────────────┬───────────────────────────────────────────────────────┐
+│ reconmap     │  [ ejemplo.com              ] [Profundidad: 1 ▾] [Escanear] │
+│              ├───────────────────────────────────────────────────────┤
+│ HISTORIAL    │  ejemplo.com · en curso · 00:14                        │
+│ ● ejemplo.com│  crt.sh   ████████████ hecho (42)                      │
+│ ✓ otro.es    │  DNS      ██████░░░░░░ 18/31                           │
+│ ✓ prueba.org │  RDAP     ████████████ hecho                           │
+│              ├───────────────────────────────────────────────────────┤
+│ [Ajustes]    │  Resumen │ Subdominios │ IPs y puertos │ Grafo │ Hallazgos │ JSON │
+│              │  ┌─────────┬─────────┬─────────┬─────────┐             │
+│              │  │ 42 subd.│ 17 IPs  │ 3 ASN   │ 5 hallaz│             │
+│              │  └─────────┴─────────┴─────────┴─────────┘             │
+│              │  tabla / grafo de la pestaña activa                    │
+└──────────────┴───────────────────────────────────────────────────────┘
+```
+
+- Barra lateral: historial de escaneos (estado con icono) y enlace a Ajustes.
+- Cabecera: campo de dominio, selector de profundidad, botón.
+- Progreso: una barra por módulo con estado y número de resultados; errores de
+  módulo visibles en ámbar (no rompen el escaneo).
+- Pestañas:
+  - **Resumen:** tarjetas con recuentos + datos RDAP (registrador, caducidad).
+  - **Subdominios:** tabla con búsqueda, columnas subdominio / IPs / fuentes /
+    visto por primera vez. Ordenable.
+  - **IPs y puertos:** tabla IP / ASN / organización / puertos / CVEs.
+  - **Grafo:** Cytoscape, color por tipo de entidad, clic en nodo → panel
+    lateral con detalles y fuentes. Botón "reencuadrar".
+  - **Hallazgos:** (Fase 4) lista ordenada por severidad con evidencia.
+  - **JSON:** botón de descarga del informe completo.
+- **Ajustes:** qué módulos están activos, cuáles necesitan clave y si la clave
+  está configurada (✓/✗, **nunca** el valor).
+- Tema oscuro, tipografía del sistema, una sola hoja `static/app.css`.
+- Responsive: usable en el móvil (la barra lateral se pliega).
+- Errores de usuario claros: dominio inválido → mensaje junto al campo, sin
+  recargar la página.
+
+### 4.5 Estructura de carpetas
+
+```
+reconmap/
+├── CLAUDE.md
+├── README.md                # con capturas de la interfaz
+├── pyproject.toml
+├── .env.example
+├── .gitignore
+├── src/reconmap/
+│   ├── models.py
+│   ├── normalize.py
+│   ├── scope.py
+│   ├── engine.py
+│   ├── store.py
+│   ├── cache.py
+│   ├── ratelimit.py
+│   ├── config.py
+│   ├── cli.py               # secundario
+│   ├── modules/
+│   │   ├── base.py
+│   │   ├── crtsh.py  dns.py  rdap.py
+│   │   └── internetdb.py  wayback.py  bgp.py
+│   ├── rules/               # Fase 4
+│   ├── report/              # exportación JSON / HTML
+│   └── web/
+│       ├── app.py           # FastAPI: rutas de páginas y de API
+│       ├── templates/
+│       │   ├── base.html
+│       │   ├── index.html
+│       │   ├── scan.html
+│       │   ├── settings.html
+│       │   └── partials/    # fragmentos HTMX (progreso, tablas, tarjetas)
+│       └── static/
+│           ├── app.css
+│           └── graph.js
+├── tests/
+│   ├── fixtures/            # respuestas reales guardadas de cada fuente
+│   ├── unit/
+│   ├── web/                 # TestClient
+│   ├── e2e/                 # playwright (opcional)
+│   └── network/
+└── docs/
+    └── capturas/
+```
+
+---
+
+## 5. Hoja de ruta por fases
+
+Cada fase tiene **objetivo**, **tareas**, **tests que deben pasar** y
+**revisión manual** (la hace el usuario).
+Claude Code: al terminar una fase, ejecuta `uv run pytest`, `uv run ruff check`
+y `uv run mypy src`, enseña el resultado y **para** hasta que el usuario
+confirme su checklist.
+
+---
+
+### Fase 0 — Esqueleto (día 1)
+
+**Objetivo:** el proyecto se instala, arranca un servidor y se ve una página.
+
+Tareas:
+- [ ] `uv init`, estructura de carpetas de la sección 4.5.
+- [ ] `pyproject.toml` con dependencias, config de ruff, mypy y marcadores
+      `network` y `e2e` registrados en pytest.
+- [ ] `.gitignore` (`.env`, `*.db`, `__pycache__`, `.venv`).
+- [ ] `.env.example` con `SHODAN_API_KEY=` y `VIRUSTOTAL_API_KEY=` vacías.
+- [ ] `models.py`, `normalize.py`.
+- [ ] `web/app.py` con `GET /` que sirve `index.html` (cabecera, campo de
+      dominio deshabilitado, barra lateral vacía) y `GET /health`.
+- [ ] `base.html` + `app.css` con el tema oscuro y el esqueleto de la 4.4.
+- [ ] Comando: `uv run reconmap-web` arranca en `http://127.0.0.1:8000`.
+
+Tests que deben pasar:
+- [ ] `normalize_domain("Ejemplo.COM.")` → `"ejemplo.com"`
+- [ ] `normalize_domain("*.ejemplo.com")` → `("ejemplo.com", wildcard=True)`
+- [ ] `normalize_domain("señal.es")` → `"xn--seal-hqa.es"`
+- [ ] Inválidos (`"no es un dominio"`, `""`, `"a..b.com"`) →
+      `InvalidDomainError`.
+- [ ] `GET /` → 200 y contiene el campo de dominio.
+- [ ] `GET /health` → 200 `{"status": "ok"}`.
+- [ ] Jinja2 tiene autoescape activado (test que renderiza `<b>` y comprueba
+      que sale como `&lt;b&gt;`).
+
+Revisión manual:
+- [ ] `uv sync` y `uv run reconmap-web` funcionan en limpio en mi máquina.
+- [ ] Abro el navegador y veo el esqueleto con el tema oscuro.
+- [ ] `git status` no muestra `.env` ni `.db`.
+
+---
+
+### Fase 1 — MVP: escanear desde la interfaz con 3 fuentes (semanas 1–2)
+
+**Objetivo (mínimo presentable):** escribo un dominio en la página, pulso
+Escanear, veo el progreso en directo y luego los resultados en tablas.
+Fuentes: crt.sh, DNS, RDAP. **Sin recursión ni grafo todavía.**
+
+#### 1A — Núcleo
+
+- [ ] `store.py`: tablas `scans`, `entities`, `relations`, `findings`,
+      `module_runs` (progreso y errores por módulo). Upsert idempotente.
+- [ ] `cache.py` con TTL; `ratelimit.py` token bucket por módulo.
+- [ ] `modules/base.py` (contrato 4.2).
+- [ ] `modules/crtsh.py`: `https://crt.sh/?q=%25.{dominio}&output=json`.
+      Subdominios de `name_value` (separados por salto de línea), deduplicados,
+      sin comodines, certificado con `not_after`.
+- [ ] `modules/dns.py`: A, AAAA, MX, NS, TXT, CNAME, CAA. NXDOMAIN/timeouts
+      → error de módulo, no excepción.
+- [ ] `modules/rdap.py`: `https://rdap.org/domain/{dominio}`.
+- [ ] `engine.py` v1: módulos en paralelo; uno que falla no tumba a los demás;
+      escribe progreso en `module_runs`.
+- [ ] Guardar en `tests/fixtures/` una respuesta real de cada fuente.
+
+#### 1B — Interfaz
+
+- [ ] `POST /scans` (formulario HTMX): valida con `normalize_domain`; si es
+      inválido devuelve el fragmento de error junto al campo (HTTP 422).
+      Si es válido, crea el escaneo y redirige a `/scans/{id}`.
+- [ ] `GET /scans/{id}`: página del escaneo.
+- [ ] `GET /scans/{id}/progress`: fragmento con una barra por módulo;
+      incluye `hx-trigger="every 1s"` solo mientras el escaneo esté activo.
+- [ ] Pestañas Resumen, Subdominios y JSON (las demás aparecen deshabilitadas
+      con "próximamente").
+- [ ] Tabla de subdominios con filtro de texto en el cliente y orden por
+      columna.
+- [ ] Barra lateral con el historial de escaneos (últimos 20).
+- [ ] `GET /api/scans/{id}/report` → JSON completo (botón de descarga).
+- [ ] Si ya hay un escaneo en marcha, el botón se deshabilita y el servidor
+      responde 429 a otro `POST`.
+- [ ] CLI mínimo: `reconmap scan <dominio> --json salida.json` (usa el mismo
+      motor; útil para depurar).
+
+Tests que deben pasar (sin red, con `respx`):
+- [ ] crt.sh: parsea la fixture → subdominios únicos, sin comodines, en ámbito.
+- [ ] crt.sh: `[]` → cero entidades; 502/timeout → error registrado.
+- [ ] DNS: registros A generan `resolves_to`; NXDOMAIN → error de módulo.
+- [ ] RDAP: extrae registrador y fecha de caducidad.
+- [ ] Caché: segunda llamada en TTL no hace petición; TTL vencido sí.
+- [ ] Store: misma entidad desde dos fuentes → una fila con las dos fuentes.
+- [ ] Motor: un módulo que lanza excepción no impide los otros.
+- [ ] Motor: rechaza un módulo `active=True` (módulo falso de prueba).
+- [ ] Web: `POST /scans` válido → redirección a `/scans/{id}`.
+- [ ] Web: `POST /scans` con `"<script>alert(1)</script>"` → 422 y el
+      texto aparece escapado en la respuesta.
+- [ ] Web: segundo `POST` con escaneo en marcha → 429.
+- [ ] Web: el fragmento de progreso **incluye** el polling si `running` y
+      **no** lo incluye si `done`.
+- [ ] **XSS:** una fixture de crt.sh con un `name_value` que contiene
+      `<img src=x onerror=alert(1)>` se muestra escapada en la tabla de
+      subdominios.
+- [ ] `GET /scans/inexistente` → 404 con página de error propia.
+
+Revisión manual:
+- [ ] Escaneo un dominio **mío** desde el navegador y veo las barras avanzar.
+- [ ] Comparo los subdominios con crt.sh en el navegador: no faltan evidentes.
+- [ ] Repito el escaneo: el segundo es casi instantáneo (caché).
+- [ ] Meto un dominio inválido: el error sale junto al campo, sin recargar.
+- [ ] Corto la red a mitad: la interfaz muestra errores en ámbar y no se
+      queda colgada para siempre.
+- [ ] Lo abro en el móvil (misma red) y es usable.
+- [ ] Hago 2–3 capturas para `docs/capturas/`.
+
+**Aquí el proyecto ya es enseñable.** Commit + etiqueta `v0.1.0`.
+
+---
+
+### Fase 2 — Más fuentes, recursión y pestaña de IPs (semana 3)
+
+**Objetivo:** el escaneo crece solo, sin salirse del ámbito, y la interfaz
+muestra la infraestructura.
+
+Tareas:
+- [ ] `modules/internetdb.py`: `https://internetdb.shodan.io/{ip}` (sin
+      clave). 404 = "sin datos", no error.
+- [ ] `modules/wayback.py`: CDX API
+      `http://web.archive.org/cdx/search/cdx?url=*.{dominio}/*&output=json&fl=original&collapse=urlkey`
+      con límite configurable.
+- [ ] `modules/bgp.py`: IP → ASN → organización (RIPEstat o BGPView).
+- [ ] `scope.py`: `in_scope(entity, target)`.
+- [ ] Motor v2: cola con `max_depth` (1 por defecto, máximo 3) y visitadas.
+- [ ] Interfaz: selector de profundidad; pestaña **IPs y puertos**; las
+      barras de progreso aparecen para los módulos nuevos sin tocar plantillas
+      (se generan desde la lista de módulos).
+- [ ] Página **Ajustes**: módulos, si requieren clave y si está configurada
+      (✓/✗).
+- [ ] Contador de peticiones por fuente en el Resumen.
+
+Tests que deben pasar:
+- [ ] `in_scope("api.ejemplo.com", "ejemplo.com")` → True
+- [ ] `in_scope("ejemplo.com.evil.net", "ejemplo.com")` → **False**
+- [ ] `in_scope("otroejemplo.com", "ejemplo.com")` → False
+- [ ] Motor: subdominio descubierto se reescanea con DNS (profundidad 1).
+- [ ] Motor: respeta `max_depth`; no procesa dos veces la misma entidad.
+- [ ] Motor: hostnames ajenos que devuelva internetdb **no** se reencolan.
+- [ ] Web: la página de Ajustes **nunca** contiene el valor de una clave
+      (test con una clave falsa en el entorno y búsqueda en el HTML).
+- [ ] Web: profundidad fuera de rango (0, 4, "abc") → 422.
+
+Revisión manual:
+- [ ] Escaneo con profundidad 2 un dominio mediano; anoto cuánto tarda.
+- [ ] En la pestaña IPs no aparece nada raro fuera de mi objetivo.
+- [ ] Ajustes muestra bien qué falta configurar.
+
+---
+
+### Fase 3 — Grafo visual y comparación (semana 4)
+
+**Objetivo:** ver la superficie de un vistazo y saber honestamente dónde
+está la herramienta frente a otras.
+
+Tareas:
+- [ ] `GET /api/scans/{id}/graph` → `{nodes, edges}`.
+- [ ] Pestaña **Grafo** con Cytoscape.js: color y forma por tipo de entidad,
+      leyenda, zoom, botón "reencuadrar", clic en nodo → panel lateral con
+      detalles y fuentes (rellenado con `textContent`).
+- [ ] Con más de ~300 nodos: agrupar URLs del Wayback en un único nodo
+      "N URLs archivadas" para que el grafo siga siendo legible.
+- [ ] Comparación: ejecutar SpiderFoot (solo pasivo) y
+      `amass enum -passive` sobre el mismo dominio propio;
+      `scripts/compare.py` → solo en reconmap / solo en la otra / en ambas;
+      resultado en `docs/comparativa.md`.
+- [ ] (Opcional) Primer test E2E con playwright: escanear con fuentes
+      simuladas y comprobar que aparece el grafo.
+
+Tests que deben pasar:
+- [ ] Grafo: toda arista apunta a nodos existentes; sin nodos duplicados.
+- [ ] Grafo: la agrupación se activa por encima del umbral.
+- [ ] Grafo: un valor con HTML en un nodo llega como texto en el JSON y el
+      panel lateral lo muestra literal (test E2E o revisión manual).
+
+Revisión manual:
+- [ ] El grafo de mi dominio se entiende de un vistazo. Si no, ajustar
+      colores, tamaños o agrupación antes de seguir.
+- [ ] Sé explicar qué encuentra SpiderFoot/amass que mi herramienta no, y
+      por qué (qué fuentes le faltan).
+
+---
+
+### Fase 4 — Hallazgos (semanas 5–6) — FASE RECORTABLE
+
+**Objetivo:** marcar hallazgos objetivos con evidencia. Si el tiempo aprieta,
+se recorta: las fases 0–3 ya forman un proyecto completo.
+
+Principios:
+- Una regla por archivo, determinista, con tests propios.
+- Cada finding guarda la **evidencia** (fuente + dato bruto).
+- Lenguaje prudente: "expuesto", "candidato", "requiere verificación".
+  Nunca "vulnerable" ni "explotable".
+- Empezar con 5–6 reglas sólidas.
+
+Catálogo inicial:
+
+| ID | Regla | Lógica | Severidad |
+|---|---|---|---|
+| R001 | Servicio de administración expuesto | puerto ∈ {22, 23, 3389, 5900, 445} en internetdb | medium (23 y 445: high) |
+| R002 | Base de datos expuesta | puerto ∈ {3306, 5432, 1433, 6379, 9200, 27017} | high |
+| R003 | CVE conocida reportada | internetdb devuelve `vulns` para la IP → listar, "requiere verificación de versión" | medium |
+| R004 | Certificado caducado o a punto | `not_after` < hoy → high; < 15 días → low | low/high |
+| R005 | Política de correo débil | sin SPF o SPF `+all` → medium; sin DMARC o `p=none` → low | low/medium |
+| R006 | CNAME colgante (candidato a takeover) | CNAME a servicio de terceros conocido (S3, GitHub Pages, Heroku, Azure…) cuyo destino da NXDOMAIN → "candidato, verificar a mano" | medium |
+| R007 | Rutas sensibles en el histórico | Wayback con `/.git/`, `/.env`, `backup.zip`, `.sql`, `wp-config`, `/phpmyadmin` → "existió, comprobar si sigue" | low |
+| R008 | Sin registro CAA | dominio raíz sin CAA | info |
+
+Tareas:
+- [ ] `rules/base.py`: `Rule.evaluate(graph) -> list[Finding]`.
+- [ ] R001–R005 primero; R006–R008 si hay tiempo.
+- [ ] Las reglas corren al final del escaneo sobre el grafo guardado.
+- [ ] Pestaña **Hallazgos**: lista por severidad, con la evidencia desplegable.
+- [ ] Tarjeta de hallazgos en el Resumen con recuento por severidad.
+- [ ] En el grafo, los nodos con hallazgos llevan borde del color de la
+      severidad más alta.
+- [ ] Botón "Exportar informe HTML" (informe autocontenido de una página).
+
+Tests que deben pasar:
+- [ ] Cada regla: caso positivo, negativo y límite (R004: caduca justo en
+      15 días).
+- [ ] R005: `v=spf1 include:_spf.google.com ~all` → sin finding de SPF;
+      `v=spf1 +all` → medium.
+- [ ] R006: CNAME a servicio conocido que **sí** resuelve → sin finding.
+- [ ] Todo finding tiene `evidence` no vacía.
+- [ ] Ninguna regla hace peticiones de red (`respx` estricto).
+- [ ] El informe HTML exportado escapa los datos externos.
+
+Revisión manual:
+- [ ] Reviso cada hallazgo sobre mi dominio: ¿es cierto? Anoto falsos
+      positivos en `docs/falsos-positivos.md`.
+- [ ] Sé explicar la lógica de cada regla con mis palabras (si no, fuera).
+
+---
+
+### Fase 5 — Despliegue en k3s (tras la semana 6, o antes si sobra tiempo)
+
+**Objetivo:** la aplicación corre en mi clúster y la uso desde el móvil.
+
+Tareas:
+- [ ] `Dockerfile` multi-stage, usuario no root, imagen pequeña.
+- [ ] `deploy/k8s/`: Deployment, Service, Ingress, PVC para SQLite,
+      Secret para claves (creado a mano, **no** en el repo).
+- [ ] Probes de liveness/readiness con `/health`.
+- [ ] Acceso **solo** por Tailscale; añadir autenticación básica (usuario y
+      contraseña desde Secret) antes de exponerlo fuera de `localhost`.
+- [ ] (Opcional) ArgoCD apuntando a `deploy/k8s/`.
+- [ ] (Opcional) Módulos activos solo para infraestructura propia: lista
+      blanca de dominios en configuración + casilla de confirmación de
+      autorización en la interfaz.
+
+Comprobaciones:
+- [ ] `docker build` y el contenedor responde en `/health`.
+- [ ] `kubectl apply` en limpio levanta la aplicación.
+- [ ] Borro el pod: vuelve y el historial de escaneos sigue ahí.
+
+Revisión manual:
+- [ ] Entro desde el móvil por Tailscale, fuera de casa, y escaneo un dominio.
+- [ ] Sin Tailscale no llego a la aplicación.
+- [ ] `git log -p | grep -i "api_key"` no devuelve ninguna clave real.
+
+---
+
+## 6. Comandos habituales
+
+```bash
+uv sync                              # instalar
+uv run reconmap-web                  # interfaz en http://127.0.0.1:8000
+uv run reconmap scan ejemplo.com     # CLI (depuración)
+uv run pytest                        # tests sin red
+uv run pytest -m network             # contra servicios reales (a mano)
+uv run pytest -m e2e                 # interfaz en navegador (opcional)
+uv run ruff check . && uv run ruff format .
+uv run mypy src
+```
+
+---
+
+## 7. Forma de trabajar (para Claude Code)
+
+- Al empezar la sesión: leer este archivo y **Estado actual**.
+- Una tarea cada vez; sus tests a la vez, nunca "luego".
+- Un commit por tarea, mensaje en español e imperativo
+  ("Añade barra de progreso por módulo").
+- Al tocar la interfaz: arrancar el servidor y comprobar la página, no solo
+  los tests. Si hay herramienta de navegador disponible, hacer captura.
+- Al terminar una fase: tests + ruff + mypy, mostrar resultado, actualizar
+  **Estado actual** y **parar**.
+- Si algo del plan no tiene sentido al implementarlo, decirlo y proponer el
+  cambio antes de desviarse.
+- No inventar endpoints ni formatos de las APIs externas: si hay duda, pedir
+  al usuario que guarde una respuesta real como fixture.
+
+---
+
+## 8. Fuera de alcance
+
+- Escaneo activo de dominios ajenos.
+- Fuerza bruta de subdominios o directorios.
+- Cualquier dato de personas (OSINT de personas, redes sociales, doxing).
+- "Análisis automático de vectores de ataque" o puntuaciones inventadas.
+- Frameworks de frontend (React, Vue…) o pasos de build de JavaScript.
+- Exponer la aplicación a Internet abierto.
+
+---
+
+## 9. Estado actual
+
+- Fase actual: **0 — Esqueleto**
+- Última tarea completada: Fase 0 completa (tests, ruff y mypy en verde).
+- Pendiente de revisión manual: checklist de la Fase 0.
+- Notas:
+  - `normalize_domain` devuelve `Domain(name, wildcard)` (NamedTuple) para
+    cubrir a la vez el caso normal y el comodín con un solo tipo.
+  - Corregido el valor esperado de `señal.es`: es `xn--seal-hqa.es`.
+  - IDNA con el códec estándar de Python (IDNA 2003), sin dependencia extra.
+  - Fase 1 necesitará `python-multipart` (FastAPI lo exige para leer
+    formularios): pedir aprobación antes de añadirlo.

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+<form class="scan-form" action="/scans" method="post">
+  <div class="field">
+    <label for="domain" class="visually-hidden">Dominio</label>
+    <input id="domain" name="domain" type="text" placeholder="ejemplo.com"
+           autocomplete="off" spellcheck="false" disabled>
+  </div>
+  <label class="depth">
+    Profundidad
+    <select name="depth" disabled>
+      <option value="1" selected>1</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+    </select>
+  </label>
+  <button type="submit" disabled>Escanear</button>
+</form>
+
+<section class="panel empty">
+  <p>Introduce un dominio para empezar un reconocimiento pasivo.</p>
+  <p class="muted">Solo se consultan fuentes públicas; no se envía tráfico al objetivo.</p>
+</section>
+{% endblock %}

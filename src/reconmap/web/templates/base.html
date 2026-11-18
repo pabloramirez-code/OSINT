@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}reconmap{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <input type="checkbox" id="nav-toggle" class="nav-toggle" hidden>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <a href="/" class="brand">reconmap</a>
+        <label for="nav-toggle" class="nav-button" aria-label="Mostrar historial">☰</label>
+      </div>
+      <nav class="sidebar-body">
+        <h2 class="sidebar-title">Historial</h2>
+        <ul class="history">
+          {% for scan in scans %}
+            <li><a href="/scans/{{ scan.id }}">{{ scan.target }}</a></li>
+          {% else %}
+            <li class="muted">Sin escaneos todavía</li>
+          {% endfor %}
+        </ul>
+        <a href="/settings" class="settings-link">Ajustes</a>
+      </nav>
+    </aside>
+    <main class="content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>
