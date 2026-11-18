@@ -12,20 +12,29 @@
           <th data-sort>Hosts</th>
           <th data-sort>ASN</th>
           <th data-sort>Organización</th>
-          <th data-sort>Puertos</th>
+          <th data-sort class="col-wide">Puertos</th>
           <th data-sort>CVEs</th>
         </tr>
       </thead>
       <tbody>
         {% for row in rows %}
           <tr>
-            <td><code>{{ row.ip }}</code>{% for tag in row.tags %} <span class="tag">{{ tag }}</span>{% endfor %}</td>
-            <td>{% for host in row.hosts %}<code>{{ host }}</code>{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}</td>
-            <td>{{ row.asns|join(", ") or "—" }}</td>
-            <td>{{ row.orgs|join(", ") or "—" }}</td>
-            <td>{{ row.ports|join(", ") or "—" }}</td>
             <td>
-              {% for cve in row.vulns %}<span class="tag tag-warning">{{ cve }}</span> {% else %}—{% endfor %}
+              <div class="cell-list">
+                <code>{{ row.ip }}</code>
+                {% if row.tags %}<div class="chips">{% for tag in row.tags %}<span class="tag">{{ tag }}</span>{% endfor %}</div>{% endif %}
+              </div>
+            </td>
+            <td>
+              <div class="cell-list">{% for host in row.hosts %}<code>{{ host }}</code>{% else %}—{% endfor %}</div>
+            </td>
+            <td class="nowrap">{{ row.asns|join(", ") or "—" }}</td>
+            <td>{{ row.orgs|join(", ") or "—" }}</td>
+            <td>
+              {% if row.ports %}<div class="chips">{% for port in row.ports %}<span class="tag">{{ port }}</span>{% endfor %}</div>{% else %}—{% endif %}
+            </td>
+            <td>
+              {% if row.vulns %}<div class="chips">{% for cve in row.vulns %}<span class="tag tag-warning">{{ cve }}</span>{% endfor %}</div>{% else %}—{% endif %}
             </td>
           </tr>
         {% endfor %}

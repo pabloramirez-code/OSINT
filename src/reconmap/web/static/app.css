@@ -38,7 +38,7 @@ a:hover { text-decoration: underline; }
 
 .layout {
   display: grid;
-  grid-template-columns: var(--sidebar-width) 1fr;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -189,12 +189,19 @@ dd { margin: 0; overflow-wrap: anywhere; }
 
 .table-filter { max-width: 360px; margin-bottom: 12px; }
 .table-wrap { overflow-x: auto; }
-.data-table { width: 100%; border-collapse: collapse; }
-.data-table th, .data-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+.data-table { width: 100%; min-width: 760px; border-collapse: collapse; }
+.data-table th, .data-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
 .data-table th { color: var(--muted); font-weight: 500; cursor: pointer; user-select: none; white-space: nowrap; }
 .data-table th[aria-sort="ascending"]::after { content: " ▲"; }
 .data-table th[aria-sort="descending"]::after { content: " ▼"; }
-.data-table td { overflow-wrap: anywhere; }
+.data-table td { vertical-align: top; }
+.data-table tbody tr:hover { background: var(--surface); }
+.data-table code, .nowrap { white-space: nowrap; }
+
+.cell-list { display: flex; flex-direction: column; gap: 4px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chips .tag { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.col-wide { width: 32%; }
 
 .tag {
   padding: 1px 6px;
@@ -221,7 +228,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .results .panel { margin-top: 12px; }
 
 @media (max-width: 720px) {
-  .layout { grid-template-columns: 1fr; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
   .sidebar { border-right: 0; border-bottom: 1px solid var(--border); }
   .nav-button { display: block; }
   .sidebar-body { display: none; }
