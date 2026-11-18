@@ -22,11 +22,10 @@ def load_fixture(name: str) -> object:
 
 
 class FakeModule:
-    """Módulo de prueba: devuelve `found` subdominios o lanza `error`."""
+    """Módulo de prueba: devuelve subdominios `found` (relativos a la entidad), las entidades
+    `extra`, o lanza `error`. Registra en `seen` cada entidad que procesa."""
 
     label = "Fuente falsa"
-    accepts = frozenset({EntityType.DOMAIN})
-    requires_key: str | None = None
     cache_ttl = timedelta(minutes=1)
     rate_limit = 100.0
 
@@ -36,22 +35,29 @@ class FakeModule:
         found: tuple[str, ...] = (),
         error: Exception | None = None,
         contact: Contact = Contact.PASSIVE,
+        accepts: frozenset[EntityType] = frozenset({EntityType.DOMAIN}),
+        extra: tuple[Entity, ...] = (),
+        requires_key: str | None = None,
     ) -> None:
         self.name = name
         self.found = found
         self.error = error
         self.contact = contact
-        self.calls = 0
+        self.accepts = accepts
+        self.extra = extra
+        self.requires_key = requires_key
+        self.seen: list[str] = []
+
+    @property
+    def calls(self) -> int:
+        return len(self.seen)
 
     async def run(self, entity: Entity, ctx: Context) -> ModuleResult:
-        self.calls += 1
+        self.seen.append(entity.value)
         if self.error:
             raise self.error
-        return ModuleResult(
-            entities=[
-                Entity(type=EntityType.SUBDOMAIN, value=f"{n}.{entity.value}") for n in self.found
-            ]
-        )
+        subs = [Entity(type=EntityType.SUBDOMAIN, value=f"{n}.{entity.value}") for n in self.found]
+        return ModuleResult(entities=[*subs, *self.extra])
 
 
 @pytest.fixture
@@ -69,6 +75,6 @@ async def ctx(store: Store) -> AsyncIterator[Context]:
 
 @pytest.fixture
 def client(store: Store) -> Iterator[TestClient]:
-    app = create_app(store=store, modules=[FakeModule(found=("www",))])
+    app = create_app(store=store, modules=[FakeModule(found=("www",))], keys={})
     with TestClient(app) as client:
         yield client

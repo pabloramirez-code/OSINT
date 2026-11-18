@@ -114,6 +114,7 @@ class ModuleProgress(BaseModel):
     total: int = 0
     results: int = 0
     requests: int = 0
+    errors: int = 0
     error: str | None = None
 
 
@@ -123,6 +124,7 @@ class Scan(BaseModel):
     depth: int = Field(default=1, ge=1, le=3)
     allow_light: bool = False
     status: ScanStatus = ScanStatus.PENDING
+    host_limit_reached: bool = False
     created_at: datetime = Field(default_factory=utcnow)
     started_at: datetime | None = None
     finished_at: datetime | None = None

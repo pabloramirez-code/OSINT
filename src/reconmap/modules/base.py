@@ -1,12 +1,12 @@
 from collections import Counter
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Protocol
 
 import httpx
 
-from reconmap.cache import Cache
+from reconmap.cache import MISSING, Cache
 from reconmap.models import Contact, Entity, EntityType, ModuleResult
 from reconmap.ratelimit import RateLimiter
 
@@ -29,13 +29,23 @@ class Module(Protocol):
 
 @dataclass
 class Context:
-    """Lo único que un módulo puede usar para salir a la red: siempre con caché y rate limit."""
+    """Lo único que un módulo puede usar para salir a la red: siempre con caché y rate limit.
+
+    Los `secret_*` (claves de API) se envían en la petición pero nunca forman parte de la
+    clave de caché ni de los mensajes de error.
+    """
 
     http: httpx.AsyncClient
     cache: Cache
     limiter: RateLimiter
     target: str
+    keys: Mapping[str, str] = field(default_factory=dict)
     requests: Counter[str] = field(default_factory=Counter)
+
+    def key(self, module: Module) -> str:
+        if module.requires_key is None or module.requires_key not in self.keys:
+            raise ModuleError(f"Falta la clave {module.requires_key}")
+        return self.keys[module.requires_key]
 
     async def throttle(self, module: Module) -> None:
         await self.limiter.acquire(module.name, module.rate_limit)
@@ -46,43 +56,78 @@ class Context:
     ) -> object:
         cache_key = f"{module.name}:{key}"
         hit = self.cache.get(cache_key)
-        if hit is not None:
+        if hit is not MISSING:
             return hit
         value = await fetch()
         self.cache.set(cache_key, value, module.cache_ttl)
         return value
 
-    async def get_json(self, module: Module, url: str, retries: int = 1) -> object:
+    async def get_json(
+        self,
+        module: Module,
+        url: str,
+        *,
+        secret_params: Mapping[str, str] | None = None,
+        secret_headers: Mapping[str, str] | None = None,
+        allow_not_found: bool = False,
+    ) -> object:
+        """Devuelve el JSON de `url`, o None si es 404 y `allow_not_found`."""
+
         async def fetch() -> object:
-            for attempt in range(retries + 1):
-                try:
-                    return await self._fetch_json(module, url)
-                except _TransientError as exc:
-                    if attempt == retries:
-                        raise ModuleError(str(exc)) from exc
-            raise AssertionError("unreachable")
+            response = await self._request(
+                module, url, secret_params, secret_headers, allow_not_found
+            )
+            if response is None:
+                return None
+            try:
+                data: object = response.json()
+            except ValueError as exc:
+                raise ModuleError("La respuesta no es JSON válido") from exc
+            return data
 
         return await self.cached(module, url, fetch)
 
-    async def _fetch_json(self, module: Module, url: str) -> object:
-        await self.throttle(module)
-        try:
-            response = await self.http.get(url)
-            response.raise_for_status()
-            data: object = response.json()
-        except httpx.HTTPStatusError as exc:
-            message = f"La fuente respondió HTTP {exc.response.status_code}"
-            if exc.response.status_code >= 500:
-                raise _TransientError(message) from exc
-            raise ModuleError(message) from exc
-        except httpx.TimeoutException as exc:
-            raise _TransientError("Tiempo de espera agotado") from exc
-        except httpx.HTTPError as exc:
-            raise ModuleError(f"Error de red ({type(exc).__name__})") from exc
-        except ValueError as exc:
-            raise ModuleError("La respuesta no es JSON válido") from exc
-        return data
+    async def get_text(
+        self,
+        module: Module,
+        url: str,
+        *,
+        secret_params: Mapping[str, str] | None = None,
+    ) -> str:
+        async def fetch() -> object:
+            response = await self._request(module, url, secret_params, None, False)
+            return response.text if response is not None else ""
 
+        text = await self.cached(module, url, fetch)
+        return text if isinstance(text, str) else ""
 
-class _TransientError(Exception):
-    """Fallo que merece un reintento (5xx o timeout)."""
+    async def _request(
+        self,
+        module: Module,
+        url: str,
+        params: Mapping[str, str] | None,
+        headers: Mapping[str, str] | None,
+        allow_not_found: bool,
+        retries: int = 1,
+    ) -> httpx.Response | None:
+        """Una petición, con un reintento ante 5xx o timeout (crt.sh y Wayback fallan a menudo)."""
+        for attempt in range(retries + 1):
+            last_attempt = attempt == retries
+            await self.throttle(module)
+            try:
+                response = await self.http.get(url, params=params, headers=headers)
+            except httpx.TimeoutException as exc:
+                if last_attempt:
+                    raise ModuleError("Tiempo de espera agotado") from exc
+                continue
+            except httpx.HTTPError as exc:
+                raise ModuleError(f"Error de red ({type(exc).__name__})") from exc
+
+            if response.status_code == 404 and allow_not_found:
+                return None
+            if response.status_code >= 500 and not last_attempt:
+                continue
+            if response.is_error:
+                raise ModuleError(f"La fuente respondió HTTP {response.status_code}")
+            return response
+        raise AssertionError("unreachable")

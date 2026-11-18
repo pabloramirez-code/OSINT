@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 
 from reconmap.models import utcnow
 
+MISSING = object()
+
 
 class Cache:
     """Caché persistente en SQLite: sobrevive a reinicios y se comparte entre web y CLI."""
@@ -25,13 +27,13 @@ class Cache:
                 "(key TEXT PRIMARY KEY, value TEXT NOT NULL, expires_at TEXT NOT NULL)"
             )
 
-    def get(self, key: str) -> object | None:
+    def get(self, key: str) -> object:
         with self._lock:
             row = self._conn.execute(
                 "SELECT value, expires_at FROM cache WHERE key = ?", (key,)
             ).fetchone()
         if row is None or datetime.fromisoformat(row[1]) <= self._clock():
-            return None
+            return MISSING
         value: object = json.loads(row[0])
         return value
 

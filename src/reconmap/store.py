@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS scans (
     depth INTEGER NOT NULL,
     allow_light INTEGER NOT NULL,
     status TEXT NOT NULL,
+    host_limit_reached INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     started_at TEXT,
     finished_at TEXT
@@ -41,6 +42,7 @@ CREATE TABLE IF NOT EXISTS module_runs (
     total INTEGER NOT NULL DEFAULT 0,
     results INTEGER NOT NULL DEFAULT 0,
     requests INTEGER NOT NULL DEFAULT 0,
+    errors INTEGER NOT NULL DEFAULT 0,
     error TEXT,
     PRIMARY KEY (scan_id, module)
 );
@@ -78,8 +80,13 @@ CREATE TABLE IF NOT EXISTS findings (
 );
 """
 
-SCAN_FIELDS = {"status", "started_at", "finished_at"}
-RUN_FIELDS = {"status", "done", "total", "results", "requests", "error"}
+MIGRATIONS = {
+    "scans": {"host_limit_reached": "INTEGER NOT NULL DEFAULT 0"},
+    "module_runs": {"errors": "INTEGER NOT NULL DEFAULT 0"},
+}
+
+SCAN_FIELDS = {"status", "started_at", "finished_at", "host_limit_reached"}
+RUN_FIELDS = {"status", "done", "total", "results", "requests", "errors", "error"}
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -101,7 +108,16 @@ class Store:
         self._conn.row_factory = sqlite3.Row
         with self._lock:
             self._conn.executescript(SCHEMA)
+            self._migrate()
         self.cache = Cache(self._conn, self._lock)
+
+    def _migrate(self) -> None:
+        """Añade columnas nuevas a bases de datos creadas por versiones anteriores."""
+        for table, columns in MIGRATIONS.items():
+            existing = {row["name"] for row in self._conn.execute(f"PRAGMA table_info({table})")}
+            for column, ddl in columns.items():
+                if column not in existing:
+                    self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
     def close(self) -> None:
         self._conn.close()
@@ -153,6 +169,7 @@ class Store:
                 total=row["total"],
                 results=row["results"],
                 requests=row["requests"],
+                errors=row["errors"],
                 error=row["error"],
             )
             for row in self._query(
@@ -189,6 +206,7 @@ class Store:
             depth=row["depth"],
             allow_light=bool(row["allow_light"]),
             status=ScanStatus(row["status"]),
+            host_limit_reached=bool(row["host_limit_reached"]),
             created_at=datetime.fromisoformat(row["created_at"]),
             started_at=_dt(row["started_at"]),
             finished_at=_dt(row["finished_at"]),

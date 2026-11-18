@@ -1,34 +1,77 @@
 import asyncio
 import logging
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 import httpx
 
 from reconmap.config import HTTP_TIMEOUT_SECONDS, MODULE_TIMEOUT_SECONDS, USER_AGENT
-from reconmap.models import Contact, Entity, EntityType, RunStatus, ScanStatus, utcnow
+from reconmap.models import (
+    Contact,
+    Entity,
+    EntityRef,
+    EntityType,
+    ModuleProgress,
+    RunStatus,
+    Scan,
+    ScanStatus,
+    utcnow,
+)
 from reconmap.modules.base import Context, Module, ModuleError
 from reconmap.ratelimit import RateLimiter
+from reconmap.scope import in_scope
 from reconmap.store import Store
 
 log = logging.getLogger(__name__)
+
+WORKERS = 8
 
 
 class ContactNotAllowedError(Exception):
     pass
 
 
+@dataclass
+class _ScanState:
+    scan: Scan
+    queue: asyncio.Queue[tuple[Entity, int]] = field(default_factory=asyncio.Queue)
+    visited: set[EntityRef] = field(default_factory=set)
+    hosts: int = 0
+    host_limit_reached: bool = False
+    progress: dict[str, ModuleProgress] = field(default_factory=dict)
+
+
 class Engine:
-    def __init__(self, store: Store, modules: list[Module]) -> None:
+    """Procesa entidades en cola: cada una pasa por los módulos que la aceptan y lo que
+    descubren se reencola si está en ámbito y no supera la profundidad ni el tope de hosts."""
+
+    def __init__(
+        self,
+        store: Store,
+        modules: list[Module],
+        keys: Mapping[str, str] | None = None,
+        max_hosts: int = 300,
+    ) -> None:
         forbidden = [m.name for m in modules if m.contact is Contact.ACTIVE]
         if forbidden:
             raise ContactNotAllowedError(f"Módulos activos no permitidos: {forbidden}")
         self.store = store
         self.modules = modules
+        self.keys = dict(keys or {})
+        self.max_hosts = max_hosts
         self.limiter = RateLimiter()
 
     def create_scan(self, target: str, depth: int = 1, allow_light: bool = False) -> str:
         scan = self.store.create_scan(target, depth, allow_light)
         self.store.start_module_runs(scan.id, [(m.name, m.label) for m in self.modules])
         return scan.id
+
+    def skip_reason(self, module: Module, scan: Scan) -> str | None:
+        if module.contact is Contact.LIGHT and not scan.allow_light:
+            return "Requiere autorización de contacto ligero"
+        if module.requires_key and module.requires_key not in self.keys:
+            return f"Falta {module.requires_key}"
+        return None
 
     async def run(self, scan_id: str) -> None:
         scan = self.store.get_scan(scan_id)
@@ -37,70 +80,131 @@ class Engine:
         self.store.update_scan(scan_id, status=ScanStatus.RUNNING, started_at=utcnow())
         status = ScanStatus.FAILED
         try:
+            state = _ScanState(scan)
+            runnable = self._prepare_modules(state)
             root = Entity(type=EntityType.DOMAIN, value=scan.target)
             self.store.upsert_entity(scan_id, root, "input")
+            state.visited.add(root.ref)
+            state.queue.put_nowait((root, 0))
+
             async with httpx.AsyncClient(
                 timeout=HTTP_TIMEOUT_SECONDS,
                 follow_redirects=True,
                 headers={"User-Agent": USER_AGENT},
             ) as http:
-                ctx = Context(http, self.store.cache, self.limiter, target=scan.target)
-                outcomes = await asyncio.gather(
-                    *(
-                        self._run_module(scan_id, m, root, ctx, scan.allow_light)
-                        for m in self.modules
-                    )
+                ctx = Context(
+                    http, self.store.cache, self.limiter, target=scan.target, keys=self.keys
                 )
-            if any(outcomes) or not self.modules:
-                status = ScanStatus.DONE
+                workers = [
+                    asyncio.create_task(self._worker(state, runnable, ctx)) for _ in range(WORKERS)
+                ]
+                await state.queue.join()
+                for worker in workers:
+                    worker.cancel()
+
+            status = self._finish_modules(state, runnable)
         except Exception:
             log.exception("El escaneo %s ha fallado", scan_id)
         finally:
             self.store.update_scan(scan_id, status=status, finished_at=utcnow())
 
-    async def _run_module(
-        self, scan_id: str, module: Module, entity: Entity, ctx: Context, allow_light: bool
-    ) -> bool:
-        if entity.type not in module.accepts:
-            self.store.update_module_run(scan_id, module.name, status=RunStatus.SKIPPED)
-            return False
-        if module.contact is Contact.LIGHT and not allow_light:
-            self.store.update_module_run(
-                scan_id,
-                module.name,
-                status=RunStatus.SKIPPED,
-                error="Requiere autorización de contacto ligero",
-            )
-            return False
+    def _prepare_modules(self, state: _ScanState) -> list[Module]:
+        runnable = []
+        for module in self.modules:
+            reason = self.skip_reason(module, state.scan)
+            if reason:
+                self.store.update_module_run(
+                    state.scan.id, module.name, status=RunStatus.SKIPPED, error=reason
+                )
+            else:
+                runnable.append(module)
+                state.progress[module.name] = ModuleProgress(module=module.name, label=module.label)
+        return runnable
 
-        self.store.update_module_run(scan_id, module.name, status=RunStatus.RUNNING, total=1)
+    def _finish_modules(self, state: _ScanState, runnable: list[Module]) -> ScanStatus:
+        any_success = not runnable
+        for module in runnable:
+            progress = state.progress[module.name]
+            failed = progress.total > 0 and progress.errors == progress.total
+            any_success = any_success or not failed
+            self._save_progress(
+                state, module.name, status=RunStatus.FAILED if failed else RunStatus.DONE
+            )
+        if state.host_limit_reached:
+            self.store.update_scan(state.scan.id, host_limit_reached=True)
+        return ScanStatus.DONE if any_success else ScanStatus.FAILED
+
+    async def _worker(self, state: _ScanState, modules: list[Module], ctx: Context) -> None:
+        while True:
+            entity, depth = await state.queue.get()
+            try:
+                applicable = [m for m in modules if entity.type in m.accepts]
+                await asyncio.gather(
+                    *(self._run_module(state, m, entity, depth, ctx) for m in applicable)
+                )
+            finally:
+                state.queue.task_done()
+
+    async def _run_module(
+        self, state: _ScanState, module: Module, entity: Entity, depth: int, ctx: Context
+    ) -> None:
+        progress = state.progress[module.name]
+        progress.total += 1
+        self._save_progress(state, module.name, status=RunStatus.RUNNING)
         try:
             result = await asyncio.wait_for(module.run(entity, ctx), MODULE_TIMEOUT_SECONDS)
         except Exception as exc:
-            message = str(exc) if isinstance(exc, ModuleError) else _unexpected(exc)
-            self.store.update_module_run(
-                scan_id,
-                module.name,
-                status=RunStatus.FAILED,
-                error=message,
-                requests=ctx.requests[module.name],
-            )
-            return False
+            progress.errors += 1
+            progress.error = str(exc) if isinstance(exc, ModuleError) else _unexpected(module, exc)
+        else:
+            self.store.save_result(state.scan.id, module.name, result)
+            progress.results += len({e.ref for e in result.entities} - {entity.ref})
+            for found in result.entities:
+                self._enqueue(state, found, depth)
+        finally:
+            progress.done += 1
+            progress.requests = ctx.requests[module.name]
+            self._save_progress(state, module.name)
 
-        self.store.save_result(scan_id, module.name, result)
+    def _enqueue(self, state: _ScanState, entity: Entity, depth: int) -> None:
+        """Las IPs se procesan a la profundidad del host que las resolvió; los subdominios
+        en ámbito cuentan un salto más. Nada fuera de ámbito se reencola (regla 3)."""
+        if entity.ref in state.visited:
+            return
+        if entity.type is EntityType.IP:
+            next_depth = depth
+        elif entity.type is EntityType.SUBDOMAIN and in_scope(entity.value, state.scan.target):
+            next_depth = depth + 1
+        else:
+            return
+        if next_depth > state.scan.depth:
+            return
+        if entity.type is EntityType.SUBDOMAIN:
+            if state.hosts >= self.max_hosts:
+                state.host_limit_reached = True
+                return
+            state.hosts += 1
+        state.visited.add(entity.ref)
+        state.queue.put_nowait((entity, next_depth))
+
+    def _save_progress(self, state: _ScanState, module: str, **extra: object) -> None:
+        progress = state.progress[module]
         self.store.update_module_run(
-            scan_id,
-            module.name,
-            status=RunStatus.DONE,
-            done=1,
-            results=len({e.ref for e in result.entities} - {entity.ref}),
-            requests=ctx.requests[module.name],
+            state.scan.id,
+            module,
+            done=progress.done,
+            total=progress.total,
+            results=progress.results,
+            requests=progress.requests,
+            errors=progress.errors,
+            error=progress.error,
+            **extra,
         )
-        return True
 
 
-def _unexpected(exc: Exception) -> str:
+def _unexpected(module: Module, exc: Exception) -> str:
     if isinstance(exc, TimeoutError):
         return "El módulo superó el tiempo máximo"
-    log.exception("Error inesperado en un módulo", exc_info=exc)
+    # Sin traceback: podría incluir URLs con claves de API.
+    log.error("Error inesperado en %s: %s", module.name, type(exc).__name__)
     return f"Error inesperado ({type(exc).__name__})"

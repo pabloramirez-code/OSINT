@@ -16,6 +16,10 @@ RECORD_TYPES = ("A", "AAAA", "MX", "NS", "TXT", "CNAME", "CAA")
 Resolve = Callable[[str, str], Awaitable[list[str]]]
 
 
+class NxDomainError(ModuleError):
+    pass
+
+
 async def resolve_with_dnspython(name: str, record_type: str) -> list[str]:
     answer = await dns.asyncresolver.resolve(name, record_type, lifetime=10)
     return [record.to_text() for record in answer]
@@ -40,7 +44,16 @@ class Dns:
             )
             return dict(zip(RECORD_TYPES, answers, strict=True))
 
-        records = await ctx.cached(self, entity.value, lookup_all)
+        try:
+            records = await ctx.cached(self, entity.value, lookup_all)
+        except NxDomainError:
+            if entity.type is EntityType.DOMAIN:
+                raise
+            return ModuleResult(
+                entities=[
+                    Entity(type=entity.type, value=entity.value, attributes={"nxdomain": True})
+                ]
+            )
         if not isinstance(records, dict):
             raise ModuleError("Caché DNS corrupta")
         return build_dns_result(entity, records, ctx.target)
@@ -52,7 +65,7 @@ class Dns:
         except (dns.resolver.NoAnswer, dns.resolver.NoNameservers):
             return []
         except dns.resolver.NXDOMAIN as exc:
-            raise ModuleError(f"NXDOMAIN: {name} no existe") from exc
+            raise NxDomainError(f"NXDOMAIN: {name} no existe") from exc
         except dns.exception.Timeout as exc:
             raise ModuleError(f"Tiempo de espera agotado consultando {record_type}") from exc
 
