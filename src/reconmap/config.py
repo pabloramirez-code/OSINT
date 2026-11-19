@@ -34,7 +34,8 @@ class Settings:
     max_light_hosts: int = field(default_factory=lambda: _env_int("RECONMAP_MAX_LIGHT_HOSTS", 50))
     wayback_limit: int = field(default_factory=lambda: _env_int("RECONMAP_WAYBACK_LIMIT", 1000))
     max_cve_lookups: int = field(default_factory=lambda: _env_int("RECONMAP_MAX_CVE_LOOKUPS", 20))
-    # Modo Activo (regla 1): solo estos dominios y sus subdominios. Vacío = modo desactivado.
+    # Modo Activo (regla 1): si se rellena, solo estos dominios y sus subdominios.
+    # Vacía: cualquier dominio, siempre con la casilla de autorización marcada.
     active_allowlist: tuple[str, ...] = field(
         default_factory=lambda: tuple(
             name.strip().lower().rstrip(".")
@@ -70,3 +71,9 @@ def api_keys() -> dict[str, str]:
 def in_allowlist(target: str, allowlist: tuple[str, ...]) -> bool:
     """El dominio está en la lista blanca o es subdominio de uno que lo está."""
     return any(target == name or target.endswith("." + name) for name in allowlist)
+
+
+def active_allowed(target: str, allowlist: tuple[str, ...]) -> bool:
+    """Modo Activo (regla 1): sin lista blanca, cualquier dominio (con la casilla de
+    autorización marcada en ese escaneo); con lista blanca, solo esos dominios."""
+    return not allowlist or in_allowlist(target, allowlist)

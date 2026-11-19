@@ -6,9 +6,9 @@
   <section class="panel">
     <h3>Este escaneo no es Activo</h3>
     {% if allowlisted %}
-      <p><code>{{ scan.target }}</code> está en la lista blanca. Para ver qué webs responden hoy, sus tecnologías leídas del HTML, el certificado real y capturas, lanza un escaneo nuevo en modo <strong>Activo</strong> (portada o «Actualizar» en Proyectos).</p>
+      <p>Para ver qué webs responden hoy, sus tecnologías leídas del HTML, el certificado real y capturas, lanza un escaneo nuevo en modo <strong>Activo</strong> (portada o «Actualizar» en Proyectos) y marca «Tengo autorización». Solo con dominios propios o con autorización por escrito.</p>
     {% else %}
-      <p>El modo Activo (httpx, tlsx y gowitness) solo está disponible para dominios propios o con autorización por escrito, listados en <code>RECONMAP_ACTIVE_ALLOWLIST</code> (en <code>.env</code>). <code>{{ scan.target }}</code> no está en esa lista.</p>
+      <p>La lista blanca del modo Activo (<code>RECONMAP_ACTIVE_ALLOWLIST</code>, en <code>.env</code>) está restringida a otros dominios: <code>{{ scan.target }}</code> no está en ella.</p>
     {% endif %}
   </section>
 {% else %}

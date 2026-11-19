@@ -56,7 +56,9 @@ def test_safe_hosts_only_valid_in_scope_and_allowlisted() -> None:
         "$(id).example.com",
     ]
     assert safe_hosts(hosts, TARGET, ALLOW) == ["www.example.com"]
-    assert safe_hosts(["www.example.com"], TARGET, ()) == []  # sin lista blanca, nada
+    # Sin lista blanca: cualquier host del ámbito. Con lista blanca: solo los suyos.
+    assert safe_hosts(["www.example.com"], TARGET, ()) == ["www.example.com"]
+    assert safe_hosts(["www.example.com"], TARGET, ("otro.org",)) == []
 
 
 # Lanzador de Docker (sin ejecutar Docker de verdad)
@@ -310,7 +312,7 @@ def test_active_tab_for_non_active_scan(app_client: TestClient, store: Store) ->
     scan = store.create_scan(TARGET)
     store.update_scan(scan.id, status=ScanStatus.DONE)
     page = app_client.get(f"/scans/{scan.id}/tabs/active").text
-    assert "Este escaneo no es Activo" in page and "está en la lista blanca" in page
+    assert "Este escaneo no es Activo" in page and "Tengo autorización" in page
 
 
 def test_live_certificate_problem_reaches_host(store: Store, tmp_path: Path) -> None:

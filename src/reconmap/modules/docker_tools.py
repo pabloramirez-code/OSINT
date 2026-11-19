@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from reconmap.config import in_allowlist
+from reconmap.config import active_allowed
 from reconmap.modules.base import ModuleError
 from reconmap.normalize import InvalidDomainError, normalize_domain
 from reconmap.scope import in_scope
@@ -52,14 +52,14 @@ class ToolRun:
 
 
 def safe_hosts(hosts: list[str], target: str, allowlist: tuple[str, ...]) -> list[str]:
-    """Solo nombres válidos, del ámbito del objetivo y de la lista blanca."""
+    """Solo nombres válidos, del ámbito del objetivo y, si la hay, de la lista blanca."""
     safe = []
     for host in hosts:
         try:
             name = normalize_domain(host).name
         except InvalidDomainError:
             continue
-        if name == host and in_scope(name, target) and in_allowlist(name, allowlist):
+        if name == host and in_scope(name, target) and active_allowed(name, allowlist):
             safe.append(name)
     return sorted(set(safe))
 

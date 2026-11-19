@@ -18,7 +18,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader
 from starlette.exceptions import HTTPException
 
-from reconmap.config import KNOWN_KEYS, Settings, api_keys, in_allowlist, load_env_file
+from reconmap.config import KNOWN_KEYS, Settings, active_allowed, api_keys, load_env_file
 from reconmap.engine import Engine
 from reconmap.insights import ScanIndex
 from reconmap.models import Scan
@@ -137,7 +137,7 @@ def create_app(
     @app.get("/projects", response_class=HTMLResponse)
     async def projects_page(request: Request) -> HTMLResponse:
         projects = views.projects(store)
-        active_targets = {p.target for p in projects if in_allowlist(p.target, allowlist)}
+        active_targets = {p.target for p in projects if active_allowed(p.target, allowlist)}
         return render(
             request, "projects.html", {"projects": projects, "active_targets": active_targets}
         )
@@ -152,6 +152,7 @@ def create_app(
         domain: Annotated[str, Form()] = "",
         depth: Annotated[str, Form()] = "1",
         authorized: Annotated[str, Form()] = "",
+        active_authorized: Annotated[str, Form()] = "",
     ) -> Response:
         try:
             target = normalize_domain(domain).name
@@ -163,13 +164,19 @@ def create_app(
             return form_error(request, 429, "Ya hay un escaneo en marcha; espera a que termine")
 
         active = authorized == "2"
-        if active and not in_allowlist(target, allowlist):
+        if active and not active_allowed(target, allowlist):
             return form_error(
                 request,
                 422,
                 "Ese dominio no está en la lista blanca del modo Activo "
                 "(RECONMAP_ACTIVE_ALLOWLIST)",
                 target,
+            )
+        if active and active_authorized != "1":
+            return form_error(
+                request,
+                422,
+                "Para el modo Activo marca la casilla «Tengo autorización por escrito…»",
             )
         scan_id = engine.create_scan(
             target, depth=int(depth), allow_light=authorized in {"1", "2"}, allow_active=active
@@ -234,7 +241,7 @@ def create_app(
         if tab == "versions":
             return views.versions(store, scan)
         if tab == "active":
-            return views.active(store, scan, in_allowlist(scan.target, allowlist))
+            return views.active(store, scan, active_allowed(scan.target, allowlist))
         if tab == "mail":
             return views.mail(store, scan)
         if tab == "web":

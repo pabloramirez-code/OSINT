@@ -1,6 +1,5 @@
-import pytest
 
-from reconmap.engine import ContactNotAllowedError, Engine
+from reconmap.engine import Engine
 from reconmap.models import Contact, EntityType, RunStatus, ScanStatus
 from reconmap.modules.base import ModuleError
 from reconmap.store import Store
@@ -41,9 +40,13 @@ async def test_scan_fails_when_every_module_fails(store: Store) -> None:
     assert store.get_scan(scan_id).status is ScanStatus.FAILED  # type: ignore[union-attr]
 
 
-def test_active_modules_are_rejected(store: Store) -> None:
-    with pytest.raises(ContactNotAllowedError):
-        Engine(store, [FakeModule(contact=Contact.ACTIVE)])
+async def test_active_modules_only_run_in_active_scans(store: Store) -> None:
+    active = FakeModule("activo", contact=Contact.ACTIVE)
+    engine = Engine(store, [active, FakeModule("ok")])
+    scan_id = engine.create_scan("example.com", allow_light=True)
+    await engine.run(scan_id)
+    assert runs(store, scan_id)["activo"] is RunStatus.SKIPPED
+    assert active.calls == 0
 
 
 async def test_light_module_needs_scan_authorization(store: Store) -> None:

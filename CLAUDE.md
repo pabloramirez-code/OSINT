@@ -46,12 +46,14 @@ vectores de ataque. **Observa y marca.**
    - `active` (**aprobado por el usuario el 2026-11-19**,
      `docs/propuesta-modo-activo.md`): herramientas externas (httpx, tlsx,
      gowitness, en Docker) que contactan con el objetivo más allá de una visita
-     a la portada. **Solo** contra dominios de la lista blanca
-     `RECONMAP_ACTIVE_ALLOWLIST` (en `.env`) y sus subdominios, y solo si en esa
-     ejecución se elige el modo «Activo» ("Tengo autorización por escrito o es
-     un dominio mío"), que queda guardado en el `Scan` (`allow_active`, que
-     implica `allow_light`). Sin lista blanca el modo no aparece y el motor
-     rechaza los módulos activos. Prohibidos los escáneres de
+     a la portada. Solo si en esa ejecución se elige el modo «Activo» **y**
+     se marca la casilla "Tengo autorización por escrito para hacer pruebas
+     activas contra este dominio, o es mío" (el servidor responde 422 sin
+     ella); queda guardado en el `Scan` (`allow_active`, que implica
+     `allow_light`). La lista blanca `RECONMAP_ACTIVE_ALLOWLIST` es opcional:
+     si se rellena, el modo Activo se limita a esos dominios y sus subdominios
+     (`active_allowed` en `config.py`). Cambio pedido por el usuario el
+     2026-11-19 (antes la lista blanca era obligatoria). Prohibidos los escáneres de
      vulnerabilidades, la fuerza bruta y el fuzzing. Los procesos se lanzan
      sin shell (lista de argumentos) y con los hosts ya validados.
 2. **Solo infraestructura, nunca personas.** No se recogen, guardan ni
@@ -669,8 +671,9 @@ docker compose down
 
 ## 8. Fuera de alcance
 
-- Escaneo activo de dominios ajenos (la lista blanca del modo Activo lo
-  impide: solo dominios propios o con autorización por escrito).
+- Escaneo activo de dominios ajenos sin autorización (el modo Activo exige
+  marcar la casilla de autorización en cada escaneo; la lista blanca opcional lo
+  restringe más).
 - Fuerza bruta de subdominios o directorios.
 - Cualquier dato de personas (OSINT de personas, redes sociales, doxing).
 - "Análisis automático de vectores de ataque" o puntuaciones inventadas.

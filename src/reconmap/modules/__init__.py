@@ -35,8 +35,7 @@ def default_modules(settings: Settings | None = None) -> list[Module]:
         EdgeRanges(),
         Nvd(has_key=NVD_KEY in api_keys(), max_lookups=settings.max_cve_lookups),
     ]
-    if settings.active_allowlist:
-        # Modo Activo: solo con lista blanca, y el motor los salta si el escaneo no es
-        # Activo o el dominio no está en ella (regla 1).
-        modules += [Tlsx(), Httpx(), Gowitness()]
+    # Modo Activo: el motor los salta si el escaneo no es Activo (casilla de autorización
+    # marcada) o si hay lista blanca y el dominio no está en ella (regla 1).
+    modules += [Tlsx(), Httpx(), Gowitness()]
     return modules

@@ -16,18 +16,20 @@
       <input type="radio" name="authorized" value="1">
       <span>Ligero</span>
     </label>
-    {% if active_allowlist %}
-    <label class="seg seg-active" title="Solo dominios de la lista blanca ({{ active_allowlist|join(', ') }}). Tengo autorización por escrito o es mío: lanza httpx, tlsx y gowitness">
+    <label class="seg seg-active" title="{{ 'Solo dominios de la lista blanca: ' ~ active_allowlist|join(', ') ~ '. ' if active_allowlist }}Requiere autorización: lanza httpx, tlsx y gowitness">
       <input type="radio" name="authorized" value="2">
       <span>Activo</span>
     </label>
-    {% endif %}
   </fieldset>
   <label class="depth" title="Saltos entre subdominios que se siguen dentro del ámbito">
     Profundidad
     <select name="depth" {{ "disabled" if busy }}>
       {% for level in (1, 2, 3) %}<option value="{{ level }}">{{ level }}</option>{% endfor %}
     </select>
+  </label>
+  <label class="active-confirm">
+    <input type="checkbox" name="active_authorized" value="1">
+    <span>Tengo autorización por escrito para hacer pruebas activas contra este dominio, o es mío. Lanza httpx, tlsx y gowitness contra sus hosts.</span>
   </label>
   <button type="submit" {{ "disabled" if busy }}>{{ "Escaneando…" if busy else "Escanear" }}</button>
 </form>

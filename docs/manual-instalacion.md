@@ -63,7 +63,7 @@ funciona en modo Pasivo.
 | `NVD_API_KEY` | Acelera la búsqueda de CVEs (de 5 a 50 consultas cada 30 s). Gratis en <https://nvd.nist.gov/developers/request-an-api-key> | `NVD_API_KEY=abcd-1234-…` |
 | `CERTSPOTTER_API_KEY` | Más consultas a Cert Spotter | |
 | `HACKERTARGET_API_KEY` | Más consultas a HackerTarget | |
-| `RECONMAP_ACTIVE_ALLOWLIST` | Activa el modo **Activo** solo para estos dominios (y sus subdominios). **Solo dominios propios o autorizados por escrito.** Vacío = el modo no aparece | `RECONMAP_ACTIVE_ALLOWLIST=midominio.com` |
+| `RECONMAP_ACTIVE_ALLOWLIST` | Opcional. Limita el modo **Activo** a estos dominios (y sus subdominios). Vacío = cualquier dominio, siempre marcando «Tengo autorización» en cada escaneo | `RECONMAP_ACTIVE_ALLOWLIST=midominio.com` |
 | `RECONMAP_DNS_SERVERS` | Resolvedores DNS a usar (vacío = los del sistema) | `RECONMAP_DNS_SERVERS=9.9.9.9,1.1.1.1` |
 
 Otros ajustes avanzados (rara vez hacen falta):
@@ -131,8 +131,9 @@ Abre **http://127.0.0.1:8000** en el navegador.
 2. Elige el modo:
    - **Pasivo**: solo fuentes públicas. Siempre disponible.
    - **Ligero**: una visita a la portada de cada host. Solo con autorización.
-   - **Activo**: httpx, tlsx y gowitness. Solo aparece para dominios de
-     `RECONMAP_ACTIVE_ALLOWLIST`.
+   - **Activo**: httpx, tlsx y gowitness. Al elegirlo aparece la casilla
+     «Tengo autorización por escrito…»: hay que marcarla o el escaneo no se lanza.
+     Si `RECONMAP_ACTIVE_ALLOWLIST` tiene dominios, solo vale para ellos.
 3. Elige la profundidad (1 es suficiente para empezar) y pulsa **Escanear**.
 
 Desde la terminal también se puede (modo Pasivo):
@@ -256,8 +257,8 @@ docker pull projectdiscovery/httpx@sha256:f8275a7c6aaec187249df9eaf4ad9196f4677a
 docker pull ghcr.io/sensepost/gowitness@sha256:39bbbcd07b37c523de3f1447cb8046cb586e91ed3b0c80436922a403ffeddc1c
 ```
 
-Después añade tu dominio a `RECONMAP_ACTIVE_ALLOWLIST` en `.env` y reinicia
-`reconmap-web`. Las capturas se guardan en `data/capturas/` (ignorada por git).
+Después elige el modo **Activo** y marca «Tengo autorización». Las capturas se guardan
+en `data/capturas/` (ignorada por git).
 
 ### B.6 Ejecutar los tests y las comprobaciones de calidad
 
@@ -276,7 +277,8 @@ uv run mypy src
 |---|---|---|
 | `failed to connect to the docker API … dockerDesktopLinuxEngine` | Docker Desktop no está arrancado | Ábrelo y espera a que el motor esté en marcha; repite el comando |
 | `Bind for 127.0.0.1:8000 failed: port is already allocated` | Otra cosa usa el puerto 8000 (por ejemplo, `reconmap-web` local) | Para la otra instancia, o cambia en `compose.yaml` `"127.0.0.1:8000:8000"` por `"127.0.0.1:8080:8000"` y abre el puerto 8080 |
-| El modo **Activo** no aparece | `RECONMAP_ACTIVE_ALLOWLIST` vacía, o el dominio no está en ella | Añade el dominio en `.env` y reinicia (`docker compose up -d` o `reconmap-web`) |
+| «Para el modo Activo marca la casilla…» | No se marcó «Tengo autorización» | Márcala (aparece al elegir Activo) |
+| «Ese dominio no está en la lista blanca del modo Activo» | `RECONMAP_ACTIVE_ALLOWLIST` tiene otros dominios | Añade el dominio o deja la variable vacía y reinicia |
 | En el modo Activo: «Falta la imagen de Docker: docker pull …» (solo instalación local) | Imagen de la herramienta no descargada | Ejecuta el `docker pull` que indica el mensaje (paso B.5) |
 | En el modo Activo: «Docker no está arrancado» (solo instalación local) | Docker Desktop cerrado | Ábrelo |
 | El escaneo tarda varios minutos | NVD sin clave (5 consultas cada 30 s) y, en modo Activo, las capturas | Pon `NVD_API_KEY` en `.env` |

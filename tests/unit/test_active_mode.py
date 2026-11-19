@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from reconmap.config import Settings, in_allowlist
+from reconmap.config import Settings, active_allowed, in_allowlist
 from reconmap.engine import ContactNotAllowedError, Engine
 from reconmap.models import Contact, RunStatus, ScanStatus
 from reconmap.store import Store
@@ -33,9 +33,10 @@ def active_module() -> FakeModule:
     return FakeModule("activo", contact=Contact.ACTIVE)
 
 
-def test_active_modules_need_an_allowlist(store: Store) -> None:
-    with pytest.raises(ContactNotAllowedError):
-        Engine(store, [active_module()])  # type: ignore[list-item]
+def test_active_allowed_without_allowlist_restricted_with_it() -> None:
+    assert active_allowed("cualquiera.org", ())
+    assert active_allowed("api.example.com", ALLOW)
+    assert not active_allowed("otro.org", ALLOW)
 
 
 def test_active_scan_only_for_allowlisted_targets(store: Store) -> None:
@@ -73,10 +74,12 @@ def active_client(store: Store) -> TestClient:
     return TestClient(app)
 
 
-def test_active_option_hidden_without_allowlist(client: TestClient) -> None:
+def test_active_option_and_checkbox_without_allowlist(client: TestClient) -> None:
     page = client.get("/").text
-    assert 'name="authorized" value="2"' not in page
-    assert "Desactivado" in page
+    assert 'name="authorized" value="2"' in page
+    assert 'name="active_authorized" value="1"' in page
+    assert "Tengo autorización por escrito" in page
+    assert "Requiere autorización" in page
 
 
 def test_active_option_shown_with_allowlist(active_client: TestClient) -> None:
@@ -95,7 +98,12 @@ def test_active_scan_rejected_outside_allowlist(active_client: TestClient, store
 def test_active_scan_created_for_allowlisted(active_client: TestClient, store: Store) -> None:
     response = active_client.post(
         "/scans",
-        data={"domain": "api.example.com", "authorized": "2", "depth": "1"},
+        data={
+            "domain": "api.example.com",
+            "authorized": "2",
+            "active_authorized": "1",
+            "depth": "1",
+        },
         follow_redirects=False,
     )
     assert response.status_code == 303
@@ -118,3 +126,41 @@ def test_mode_pill(active_client: TestClient, store: Store) -> None:
     scan = store.create_scan("example.com", allow_active=True)
     store.update_scan(scan.id, status=ScanStatus.DONE)
     assert 'class="pill pill-activo"' in active_client.get("/projects").text
+
+
+def test_active_scan_needs_the_checkbox(client: TestClient, store: Store) -> None:
+    response = client.post("/scans", data={"domain": "example.org", "authorized": "2"})
+    assert response.status_code == 422
+    assert "Tengo autorización" in response.text
+    assert not store.list_scans()
+
+
+def test_active_scan_without_allowlist_with_checkbox(client: TestClient, store: Store) -> None:
+    response = client.post(
+        "/scans",
+        data={"domain": "example.org", "authorized": "2", "active_authorized": "1"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    (scan,) = store.list_scans()
+    assert scan.mode == "activo" and scan.allow_light
+
+
+def test_checkbox_alone_does_not_make_a_scan_active(client: TestClient, store: Store) -> None:
+    client.post(
+        "/scans",
+        data={"domain": "example.org", "authorized": "", "active_authorized": "1"},
+        follow_redirects=False,
+    )
+    (scan,) = store.list_scans()
+    assert scan.mode == "pasivo"
+
+
+def test_projects_offer_active_to_every_domain_without_allowlist(
+    client: TestClient, store: Store
+) -> None:
+    scan = store.create_scan("otro.org")
+    store.update_scan(scan.id, status=ScanStatus.DONE)
+    form = rescan_form(client.get("/projects").text, "otro.org")
+    assert 'name="authorized" value="2"' in form
+    assert 'name="active_authorized" value="1"' in form

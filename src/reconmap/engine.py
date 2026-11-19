@@ -6,7 +6,12 @@ from pathlib import Path
 
 import httpx
 
-from reconmap.config import HTTP_TIMEOUT_SECONDS, MODULE_TIMEOUT_SECONDS, USER_AGENT, in_allowlist
+from reconmap.config import (
+    HTTP_TIMEOUT_SECONDS,
+    MODULE_TIMEOUT_SECONDS,
+    USER_AGENT,
+    active_allowed,
+)
 from reconmap.models import (
     Contact,
     Entity,
@@ -56,11 +61,6 @@ class Engine:
         active_allowlist: tuple[str, ...] = (),
         data_dir: Path | None = None,
     ) -> None:
-        forbidden = [m.name for m in modules if m.contact is Contact.ACTIVE]
-        if forbidden and not active_allowlist:
-            raise ContactNotAllowedError(
-                f"Módulos activos sin lista blanca (RECONMAP_ACTIVE_ALLOWLIST): {forbidden}"
-            )
         self.active_allowlist = active_allowlist
         self.data_dir = data_dir
         self.store = store
@@ -72,7 +72,7 @@ class Engine:
     def create_scan(
         self, target: str, depth: int = 1, allow_light: bool = False, allow_active: bool = False
     ) -> str:
-        if allow_active and not in_allowlist(target, self.active_allowlist):
+        if allow_active and not active_allowed(target, self.active_allowlist):
             raise ContactNotAllowedError(f"{target} no está en la lista blanca del modo Activo")
         scan = self.store.create_scan(target, depth, allow_light, allow_active)
         self.store.start_module_runs(scan.id, [(m.name, m.label) for m in self.modules])
@@ -82,7 +82,7 @@ class Engine:
         if module.contact is Contact.LIGHT and not scan.allow_light:
             return "Requiere autorización de contacto ligero"
         if module.contact is Contact.ACTIVE and not (
-            scan.allow_active and in_allowlist(scan.target, self.active_allowlist)
+            scan.allow_active and active_allowed(scan.target, self.active_allowlist)
         ):
             return "Requiere modo Activo y dominio en la lista blanca"
         if module.requires_key and module.requires_key not in self.keys:

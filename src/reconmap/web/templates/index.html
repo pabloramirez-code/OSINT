@@ -52,10 +52,10 @@
       <p class="mode-modules">{% if light %}{{ light|length }} fuentes: {{ light|map(attribute="label")|join(", ") }}.{% endif %}</p>
     </article>
     <article class="mode mode-active">
-      <span class="mode-badge">{{ "Solo lista blanca" if active_allowlist else "Desactivado" }}</span>
+      <span class="mode-badge">{{ "Solo lista blanca" if active_allowlist else "Requiere autorización" }}</span>
       <h3>Activo</h3>
       <p class="mode-claim">Solo dominios propios o con autorización por escrito.</p>
-      <p>Lanza httpx, tlsx y gowitness (Docker) contra los dominios de <code>RECONMAP_ACTIVE_ALLOWLIST</code>: qué webs responden, tecnologías leídas del HTML, certificado real y capturas. Nunca escáneres de vulnerabilidades, fuerza bruta ni fuzzing.</p>
+      <p>Lanza httpx, tlsx y gowitness contra los hosts del dominio: qué webs responden, tecnologías leídas del HTML, certificado real y capturas. Hay que marcar «Tengo autorización» en cada escaneo{% if active_allowlist %}, y solo vale para <code>{{ active_allowlist|join(", ") }}</code>{% endif %}. Nunca escáneres de vulnerabilidades, fuerza bruta ni fuzzing.</p>
     </article>
   </div>
 </section>

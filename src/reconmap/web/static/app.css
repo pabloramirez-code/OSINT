@@ -620,3 +620,8 @@ details > summary { cursor: pointer; }
 .shot img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; object-position: top; background: var(--surface); }
 .shot figcaption { display: grid; gap: 2px; padding: 8px 10px; font-size: 13px; overflow-wrap: anywhere; }
 code.command { display: block; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+
+/* Casilla de autorización del modo Activo: solo visible con «Activo» marcado */
+.active-confirm { display: none; flex-basis: 100%; align-items: flex-start; gap: 8px; font-size: 14px; color: var(--danger); }
+.active-confirm input { margin-top: 3px; }
+form:has(input[name="authorized"][value="2"]:checked) .active-confirm { display: flex; }
