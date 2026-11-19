@@ -2,6 +2,7 @@ import asyncio
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import httpx
 
@@ -12,6 +13,7 @@ from reconmap.models import (
     EntityRef,
     EntityType,
     ModuleProgress,
+    RelationType,
     RunStatus,
     Scan,
     ScanStatus,
@@ -52,6 +54,7 @@ class Engine:
         keys: Mapping[str, str] | None = None,
         max_hosts: int = 300,
         active_allowlist: tuple[str, ...] = (),
+        data_dir: Path | None = None,
     ) -> None:
         forbidden = [m.name for m in modules if m.contact is Contact.ACTIVE]
         if forbidden and not active_allowlist:
@@ -59,6 +62,7 @@ class Engine:
                 f"Módulos activos sin lista blanca (RECONMAP_ACTIVE_ALLOWLIST): {forbidden}"
             )
         self.active_allowlist = active_allowlist
+        self.data_dir = data_dir
         self.store = store
         self.modules = modules
         self.keys = dict(keys or {})
@@ -105,12 +109,25 @@ class Engine:
                 headers={"User-Agent": USER_AGENT},
             ) as http:
                 ctx = Context(
-                    http, self.store.cache, self.limiter, target=scan.target, keys=self.keys
+                    http,
+                    self.store.cache,
+                    self.limiter,
+                    target=scan.target,
+                    keys=self.keys,
+                    scan_id=scan.id,
+                    allowlist=self.active_allowlist,
+                    data_dir=self.data_dir,
                 )
                 workers = [
                     asyncio.create_task(self._worker(state, runnable, ctx)) for _ in range(WORKERS)
                 ]
                 await state.queue.join()
+                # Fase final: módulos por lotes (modo Activo), una vez con todos los hosts.
+                # Lo que descubren vuelve a la cola normal (DNS, NVD…).
+                for module in runnable:
+                    if getattr(module, "batch", False):
+                        await self._run_batch(state, module, ctx)
+                        await state.queue.join()
                 for worker in workers:
                     worker.cancel()
 
@@ -150,7 +167,11 @@ class Engine:
         while True:
             entity, depth = await state.queue.get()
             try:
-                applicable = [m for m in modules if entity.type in m.accepts]
+                applicable = [
+                    m
+                    for m in modules
+                    if entity.type in m.accepts and not getattr(m, "batch", False)
+                ]
                 await asyncio.gather(
                     *(self._run_module(state, m, entity, depth, ctx) for m in applicable)
                 )
@@ -176,6 +197,40 @@ class Engine:
                 self._enqueue(state, found, depth)
         finally:
             progress.done += 1
+            progress.requests = ctx.requests[module.name]
+            self._save_progress(state, module.name)
+
+    async def _run_batch(self, state: _ScanState, module: Module, ctx: Context) -> None:
+        resolving = {
+            (r.from_ref.type, r.from_ref.value)
+            for r in self.store.relations(state.scan.id)
+            if r.type is RelationType.RESOLVES_TO
+        }
+        hosts = [
+            e
+            for e in self.store.entities(state.scan.id)
+            if e.type in module.accepts and (e.type, e.value) in resolving
+        ]
+        progress = state.progress[module.name]
+        progress.total = len(hosts)
+        self._save_progress(state, module.name, status=RunStatus.RUNNING)
+        try:
+            timeout = getattr(module, "timeout", MODULE_TIMEOUT_SECONDS)
+            run_batch = module.run_batch  # type: ignore[attr-defined]
+            result = await asyncio.wait_for(run_batch(hosts, ctx), timeout)
+        except Exception as exc:
+            progress.errors = max(1, len(hosts))
+            progress.error = str(exc) if isinstance(exc, ModuleError) else _unexpected(module, exc)
+        else:
+            self.store.save_result(state.scan.id, module.name, result)
+            given = {e.ref for e in hosts} | {
+                Entity(type=EntityType.DOMAIN, value=state.scan.target).ref
+            }
+            progress.results = len({e.ref for e in result.entities} - given)
+            for found in result.entities:
+                self._enqueue(state, found, 0)
+        finally:
+            progress.done = progress.total
             progress.requests = ctx.requests[module.name]
             self._save_progress(state, module.name)
 

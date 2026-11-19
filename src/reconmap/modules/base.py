@@ -2,6 +2,7 @@ from collections import Counter
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
+from pathlib import Path
 from typing import Protocol
 
 import httpx
@@ -43,6 +44,10 @@ class Context:
     keys: Mapping[str, str] = field(default_factory=dict)
     requests: Counter[str] = field(default_factory=Counter)
     counters: Counter[str] = field(default_factory=Counter)
+    # Modo Activo: escaneo en curso, lista blanca y carpeta de datos (capturas).
+    scan_id: str = ""
+    allowlist: tuple[str, ...] = ()
+    data_dir: Path | None = None
 
     def key(self, module: Module) -> str:
         if module.requires_key is None or module.requires_key not in self.keys:

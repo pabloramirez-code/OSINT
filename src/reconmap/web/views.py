@@ -422,6 +422,57 @@ def _is_kev(cve: Entity) -> bool:
     return isinstance(raw, dict) and raw.get("kev") is True
 
 
+ACTIVE_TOOLS = ("tlsx", "httpx", "gowitness")
+
+
+@dataclass(frozen=True)
+class ActiveHost:
+    host: str
+    http: dict[str, object]
+    tls: dict[str, object]
+    screenshot: dict[str, object]
+
+
+def active(store: Store, scan: Scan, allowlisted: bool) -> dict[str, object]:
+    """Resultados del modo Activo: comandos ejecutados, capturas y datos por host."""
+    roots = store.entities(scan.id, EntityType.DOMAIN)
+    root = roots[0].attributes if roots else {}
+    progress = {p.module: p for p in scan.progress}
+    runs = []
+    for tool in ACTIVE_TOOLS:
+        record = root.get(f"active_run_{tool}")
+        run = progress.get(tool)
+        runs.append(
+            {
+                "tool": tool,
+                "record": record if isinstance(record, dict) else None,
+                "status": run.status.value if run else "no ejecutado",
+                "error": run.error if run else None,
+            }
+        )
+    hosts = []
+    for entity in [*roots, *store.entities(scan.id, EntityType.SUBDOMAIN)]:
+        attrs = entity.attributes
+        http, tls, shot = attrs.get("http_probe"), attrs.get("tls_live"), attrs.get("screenshot")
+        if not any(isinstance(x, dict) for x in (http, tls, shot)):
+            continue
+        hosts.append(
+            ActiveHost(
+                host=entity.value,
+                http=http if isinstance(http, dict) else {},
+                tls=tls if isinstance(tls, dict) else {},
+                screenshot=shot if isinstance(shot, dict) else {},
+            )
+        )
+    hosts.sort(key=lambda h: (not h.screenshot.get("file"), h.host))
+    discovered = sorted(
+        r.to_ref.value
+        for r in store.relations(scan.id)
+        if r.source == "tlsx" and r.type is RelationType.HAS_SUBDOMAIN
+    )
+    return {"runs": runs, "hosts": hosts, "discovered": discovered, "allowlisted": allowlisted}
+
+
 def mail(store: Store, scan: Scan) -> dict[str, object]:
     roots = store.entities(scan.id, EntityType.DOMAIN)
     root = roots[0].attributes if roots else {}

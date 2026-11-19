@@ -100,6 +100,7 @@ class Technology:
     version: str | None = None
     update: str | None = None  # p. ej. "p1" en OpenSSH 8.9p1
     part: str = "a"  # a = aplicación, o = sistema operativo
+    searchable: bool = True  # False: nombre sin equivalente fiable en NVD (no se buscan CVEs)
 
     @property
     def key(self) -> str:
@@ -116,7 +117,7 @@ class Technology:
     @property
     def cpe(self) -> str | None:
         """CPE 2.3 completo para NVD; None si no hay versión (no se buscan CVEs)."""
-        if not self.version:
+        if not self.version or not self.searchable:
             return None
         return (
             f"cpe:2.3:{self.part}:{self.vendor}:{self.product}:{self.version}:"
@@ -180,6 +181,41 @@ def from_header(value: str) -> list[Technology]:
         version, update = normalize_version(raw_version or None)
         found.append(Technology(vendor, cpe_product, name, version, update))
     return found
+
+
+# Nombres de httpx -td (huellas de Wappalyzer) → (vendor, product) en NVD.
+WAPPALYZER_PRODUCTS: dict[str, tuple[str, str]] = {
+    "Nginx": ("f5", "nginx"),
+    "Apache HTTP Server": ("apache", "http_server"),
+    "IIS": ("microsoft", "internet_information_services"),
+    "PHP": ("php", "php"),
+    "OpenSSL": ("openssl", "openssl"),
+    "OpenResty": ("openresty", "openresty"),
+    "LiteSpeed": ("litespeedtech", "litespeed_web_server"),
+    "WordPress": ("wordpress", "wordpress"),
+    "Drupal": ("drupal", "drupal"),
+    "Joomla": ("joomla", r"joomla\!"),
+    "jQuery": ("jquery", "jquery"),
+    "jQuery UI": ("jqueryui", "jquery_ui"),
+    "Bootstrap": ("getbootstrap", "bootstrap"),
+    "Moment.js": ("momentjs", "moment"),
+    "Express": ("expressjs", "express"),
+    "Apache Tomcat": ("apache", "tomcat"),
+    "Varnish": ("varnish-software", "varnish_cache"),
+    "Envoy": ("envoyproxy", "envoy"),
+}
+
+
+def from_wappalyzer(item: str) -> Technology:
+    """'PHP:8.3.36' → PHP 8.3.36. Lo que no está en la tabla se muestra igual, sin CVEs."""
+    name, _, raw_version = item.partition(":")
+    name = name.strip()[:80]
+    version, update = normalize_version(raw_version.strip() or None)
+    if name in WAPPALYZER_PRODUCTS:
+        vendor, product = WAPPALYZER_PRODUCTS[name]
+        return Technology(vendor, product, name, version, update)
+    slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") or "desconocido"
+    return Technology("wappalyzer", slug, name, version, update, searchable=False)
 
 
 def from_http_headers(http_headers: object) -> list[Technology]:

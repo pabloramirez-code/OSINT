@@ -762,8 +762,30 @@ Sin `uv` en el PATH (Windows, PowerShell, desde la raíz del proyecto):
     + `in_allowlist`, motor (acepta módulos activos solo con lista blanca; los
     salta si el escaneo no es Activo o el dominio no está), opción «Activo» en
     la portada y en Proyectos solo para dominios de la lista, 422 fuera de ella.
-  - Siguiente: tlsx, httpx y gowitness. Antes, guardar salidas reales como
-    fixtures (Docker Desktop no estaba arrancado el 2026-11-19).
+  - Pasos 2-4 hechos: `modules/active_tools.py` (tlsx v1.5.0, httpx v1.12.0,
+    gowitness 3.2.2) con `modules/docker_tools.py`: imágenes oficiales fijadas
+    por digest, `docker run --rm -i --pull never`, sin shell, hosts por stdin
+    (UTF-8 sin BOM) tras `safe_hosts` (normalizados, en ámbito y en lista
+    blanca). Fixtures reales en `tests/fixtures/` (gowitness anonimizada).
+  - Se ejecutan **por lotes al final** (`batch = True`, `run_batch`): una vez,
+    con los hosts que resuelven; lo que descubren vuelve a la cola (DNS, NVD).
+    Los módulos activos solo se cargan si hay lista blanca.
+  - tlsx: no admite `-san`/`-cn` junto a otras opciones; con `-json` ya trae
+    SAN/CN, y `-ex -ss -mm -un` añaden los indicadores solo cuando son ciertos.
+    Atributo `tls_live`; certificado real como entidad; SAN en ámbito →
+    subdominio nuevo, fuera de ámbito → solo texto.
+  - httpx: `-td` (Wappalyzer) → `technology` (tabla `WAPPALYZER_PRODUCTS`; lo no
+    mapeado se muestra sin CVEs). Agente de usuario de reconmap, sin seguir
+    redirecciones ni pedir favicon. Atributo `http_probe`.
+  - gowitness: su JSON incluye cabeceras y **valores de cookies** aunque se pida
+    no guardar red: solo se leen URL/estado/título/archivo y la carpeta `raw/`
+    se borra siempre. Capturas en `data/capturas/<scan>/<host>.jpeg` (en
+    `.gitignore`), servidas por `/scans/{id}/capturas/{nombre}` con nombre y
+    carpeta validados.
+  - Pestaña **Activo**: comandos exactos, capturas, web/TLS/tecnologías por
+    host. Certificado real autofirmado/no coincide → `warn`; caducado → `fail`.
+  - Nunca usar `-pd`/`-dashboard` (subirían resultados a la nube de
+    ProjectDiscovery).
 - Notas:
   - `normalize_domain` devuelve `Domain(name, wildcard)` (NamedTuple).
   - IDNA con el códec estándar de Python (IDNA 2003), sin dependencia extra.

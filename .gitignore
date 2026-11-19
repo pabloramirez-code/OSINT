@@ -8,3 +8,5 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 dist/
+# Capturas del modo Activo (gowitness)
+data/

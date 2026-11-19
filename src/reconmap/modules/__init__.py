@@ -1,4 +1,5 @@
 from reconmap.config import Settings, api_keys
+from reconmap.modules.active_tools import Gowitness, Httpx, Tlsx
 from reconmap.modules.base import Module
 from reconmap.modules.bgp import Bgp
 from reconmap.modules.certspotter import CertSpotter
@@ -19,7 +20,7 @@ from reconmap.modules.wayback import Wayback
 def default_modules(settings: Settings | None = None) -> list[Module]:
     settings = settings or Settings()
     resolve = make_resolver(settings.dns_servers)
-    return [
+    modules: list[Module] = [
         CrtSh(),
         CertSpotter(),
         HackerTarget(),
@@ -34,3 +35,8 @@ def default_modules(settings: Settings | None = None) -> list[Module]:
         EdgeRanges(),
         Nvd(has_key=NVD_KEY in api_keys(), max_lookups=settings.max_cve_lookups),
     ]
+    if settings.active_allowlist:
+        # Modo Activo: solo con lista blanca, y el motor los salta si el escaneo no es
+        # Activo o el dominio no está en ella (regla 1).
+        modules += [Tlsx(), Httpx(), Gowitness()]
+    return modules

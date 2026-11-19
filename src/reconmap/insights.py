@@ -359,6 +359,18 @@ class ScanIndex:
         seen = {c.summary for c in problems}
         problems += [c for c in self._technology_problems_through(nid) if c.summary not in seen]
 
+        tls_live = attrs.get("tls_live")
+        if isinstance(tls_live, dict) and tls_live.get("issues"):
+            issues = [str(i) for i in _strings(tls_live["issues"])]
+            problems.append(
+                Check(
+                    "Certificado (hoy)",
+                    Status.FAIL if "caducado" in issues else Status.WARN,
+                    "El certificado que sirve hoy es " + ", ".join(issues),
+                    "Visto con tlsx en modo Activo. Un certificado autofirmado o que no coincide "
+                    "suele indicar un servicio sin configurar o un ingress por defecto.",
+                )
+            )
         headers = attrs.get("http_headers")
         if isinstance(headers, dict):
             report = assess_host(host.value, headers)
@@ -421,6 +433,14 @@ class ScanIndex:
         dns_records = raw_dns if isinstance(raw_dns, dict) else {}
         info = [("IPs", ", ".join(i.value for i in ips) or "—")]
         info.append(("Tecnologías", self._technology_labels(nid)))
+        http_probe = attrs.get("http_probe")
+        if isinstance(http_probe, dict):
+            code = http_probe.get("status_code") or "—"
+            web = f"{code} · {http_probe.get('title') or 'sin título'}"
+            info.append(("Web hoy (httpx)", web))
+        if isinstance(tls_live, dict):
+            cert = f"{tls_live.get('issuer') or '—'} · caduca {str(tls_live.get('not_after'))[:10]}"
+            info.append(("Certificado hoy (tlsx)", cert))
         if edge is not None:
             info.append(("Proveedor de la IP", ", ".join(edge.ip_providers) or "desconocido"))
             info.append(("WAF", edge.label))

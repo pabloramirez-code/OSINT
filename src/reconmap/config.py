@@ -23,6 +23,9 @@ class Settings:
     db_path: Path = field(
         default_factory=lambda: Path(os.environ.get("RECONMAP_DB", "reconmap.db"))
     )
+    data_dir: Path = field(
+        default_factory=lambda: Path(os.environ.get("RECONMAP_DATA_DIR", "data"))
+    )
     host: str = "127.0.0.1"
     port: int = 8000
     max_hosts: int = field(default_factory=lambda: _env_int("RECONMAP_MAX_HOSTS", 300))

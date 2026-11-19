@@ -1,11 +1,18 @@
 import asyncio
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated
 
 import uvicorn
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader
@@ -24,6 +31,8 @@ from reconmap.store import Store
 from reconmap.web import views
 
 WEB_DIR = Path(__file__).parent
+SCREENSHOT_FILE = re.compile(r"[a-z0-9][a-z0-9.-]{0,252}\.jpeg")
+SCAN_ID = re.compile(r"[0-9a-f]{12}")
 TABS = {
     "summary",
     "changes",
@@ -31,6 +40,7 @@ TABS = {
     "ips",
     "tech",
     "versions",
+    "active",
     "graph",
     "mail",
     "web",
@@ -59,6 +69,7 @@ def create_app(
         keys=keys,
         max_hosts=settings.max_hosts,
         active_allowlist=allowlist,
+        data_dir=settings.data_dir,
     )
     running: set[asyncio.Task[None]] = set()
 
@@ -177,6 +188,22 @@ def create_app(
         context = {"scan": get_scan(scan_id), "initial_tab": tab if tab in TABS else "summary"}
         return render(request, "scan.html", context)
 
+    @app.get("/scans/{scan_id}/capturas/{name}")
+    async def screenshot(scan_id: str, name: str) -> FileResponse:
+        """Captura de gowitness. Nombre y carpeta los controla reconmap, nunca la herramienta."""
+        get_scan(scan_id)
+        if not SCREENSHOT_FILE.fullmatch(name) or not SCAN_ID.fullmatch(scan_id):
+            raise HTTPException(404, "Esa captura no existe")
+        folder = (settings.data_dir / "capturas" / scan_id).resolve()
+        path = (folder / name).resolve()
+        if path.parent != folder or not path.is_file():
+            raise HTTPException(404, "Esa captura no existe")
+        return FileResponse(
+            path,
+            media_type="image/jpeg",
+            headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=3600"},
+        )
+
     @app.get("/scans/{scan_id}/progress", response_class=HTMLResponse)
     async def scan_progress(request: Request, scan_id: str) -> HTMLResponse:
         context = {"scan": get_scan(scan_id), "oob": True}
@@ -206,6 +233,8 @@ def create_app(
             return views.technologies(store, scan)
         if tab == "versions":
             return views.versions(store, scan)
+        if tab == "active":
+            return views.active(store, scan, in_allowlist(scan.target, allowlist))
         if tab == "mail":
             return views.mail(store, scan)
         if tab == "web":

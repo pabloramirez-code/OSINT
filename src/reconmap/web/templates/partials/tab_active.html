@@ -1,0 +1,105 @@
+{% extends "partials/tabs.html" %}
+{% set active = "active" %}
+
+{% block tab %}
+{% if not scan.allow_active %}
+  <section class="panel">
+    <h3>Este escaneo no es Activo</h3>
+    {% if allowlisted %}
+      <p><code>{{ scan.target }}</code> está en la lista blanca. Para ver qué webs responden hoy, sus tecnologías leídas del HTML, el certificado real y capturas, lanza un escaneo nuevo en modo <strong>Activo</strong> (portada o «Actualizar» en Proyectos).</p>
+    {% else %}
+      <p>El modo Activo (httpx, tlsx y gowitness) solo está disponible para dominios propios o con autorización por escrito, listados en <code>RECONMAP_ACTIVE_ALLOWLIST</code> (en <code>.env</code>). <code>{{ scan.target }}</code> no está en esa lista.</p>
+    {% endif %}
+  </section>
+{% else %}
+  <section class="panel">
+    <h3>Herramientas ejecutadas</h3>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Herramienta</th><th>Estado</th><th>Hosts</th><th>Duración</th><th>Comando exacto</th></tr></thead>
+        <tbody>
+          {% for run in runs %}
+            <tr>
+              <td class="nowrap"><strong>{{ run.tool }}</strong></td>
+              <td>{{ run.status }}{% if run.error %}<div class="form-error">{{ run.error }}</div>{% endif %}</td>
+              <td>{{ run.record.hosts if run.record else "—" }}</td>
+              <td class="nowrap">{{ "%.1f s"|format(run.record.seconds) if run.record else "—" }}</td>
+              <td>{% if run.record %}<code class="command">{{ run.record.command }}</code>{% else %}—{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">Ejecutadas en Docker con las imágenes oficiales fijadas por versión, sin shell, solo contra hosts de la lista blanca que resuelven. No se guardan cuerpos, cabeceras completas ni valores de cookies.</p>
+  </section>
+
+  {% if discovered %}
+    <section class="panel">
+      <h3>Subdominios nuevos en los certificados</h3>
+      <p>{% for host in discovered %}<code>{{ host }}</code> {% endfor %}</p>
+    </section>
+  {% endif %}
+
+  {% set shots = hosts|selectattr("screenshot.file")|list %}
+  {% if shots %}
+    <section class="panel">
+      <h3>Capturas ({{ shots|length }})</h3>
+      <div class="shots">
+        {% for item in shots %}
+          <figure class="shot">
+            <a href="/scans/{{ scan.id }}/capturas/{{ item.screenshot.file }}" target="_blank" rel="noopener">
+              <img src="/scans/{{ scan.id }}/capturas/{{ item.screenshot.file }}" alt="Captura de {{ item.host }}" loading="lazy" width="320" height="180">
+            </a>
+            <figcaption>
+              <code>{{ item.host }}</code>
+              <span class="muted">{{ item.screenshot.status or "—" }} · {{ item.screenshot.title or "sin título" }}</span>
+            </figcaption>
+          </figure>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  {% if hosts %}
+    <section class="panel">
+      <h3>Por host</h3>
+      <input type="search" class="table-filter" placeholder="Filtrar hosts, títulos, tecnologías…" data-filter="#active-table">
+      <div class="table-wrap">
+        <table id="active-table" class="data-table">
+          <thead><tr><th data-sort>Host</th><th data-sort>Web hoy (httpx)</th><th data-sort>Tecnologías del HTML</th><th data-sort>Certificado hoy (tlsx)</th></tr></thead>
+          <tbody>
+            {% for item in hosts %}
+              <tr>
+                <td><code>{{ item.host }}</code></td>
+                <td>
+                  {% if item.http %}
+                    <div class="cell-list">
+                      <span><strong>{{ item.http.status_code or "—" }}</strong> {{ item.http.title or "" }}</span>
+                      {% if item.http.webserver %}<span class="muted">{{ item.http.webserver }}</span>{% endif %}
+                      {% if item.http.location %}<span class="muted">→ {{ item.http.location }}</span>{% endif %}
+                      {% if item.http.cdn %}<span class="tag">{{ item.http.cdn }}</span>{% endif %}
+                    </div>
+                  {% else %}<span class="muted">no responde por web</span>{% endif %}
+                </td>
+                <td>{% if item.http.tech %}<div class="chips">{% for tech in item.http.tech %}<span class="tag">{{ tech }}</span>{% endfor %}</div>{% else %}—{% endif %}</td>
+                <td>
+                  {% if item.tls %}
+                    <div class="cell-list">
+                      <span>{{ item.tls.issuer or "—" }} · caduca {{ (item.tls.not_after or "")[:10] }}</span>
+                      <span class="muted">{{ item.tls.tls_version }} · {{ item.tls.cipher }}</span>
+                      {% for issue in item.tls.issues %}<span class="tag tag-warning">{{ issue }}</span>{% endfor %}
+                      {% if item.tls.foreign_names %}<span class="muted">{{ item.tls.foreign_names|length }} nombre(s) de otros dominios en el certificado</span>{% endif %}
+                    </div>
+                  {% else %}—{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% elif runs|selectattr("record")|list %}
+    <p class="muted">Las herramientas se ejecutaron pero no devolvieron resultados.</p>
+  {% endif %}
+{% endif %}
+{% endblock %}

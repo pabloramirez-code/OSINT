@@ -44,7 +44,14 @@ def scan(
     load_env_file()
     settings = Settings()
     store = Store(settings.db_path)
-    engine = Engine(store, default_modules(settings), keys=api_keys(), max_hosts=settings.max_hosts)
+    engine = Engine(
+        store,
+        default_modules(settings),
+        keys=api_keys(),
+        max_hosts=settings.max_hosts,
+        active_allowlist=settings.active_allowlist,
+        data_dir=settings.data_dir,
+    )
     scan_id = engine.create_scan(target, depth=depth)
     with console.status(f"Escaneando {target}…"):
         asyncio.run(engine.run(scan_id))
