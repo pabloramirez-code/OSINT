@@ -18,7 +18,7 @@
       <tbody>
         {% for sub in subdomains %}
           <tr>
-            <td><code>{{ sub.value }}</code>{% if sub.attributes.wildcard %} <span class="tag">comodín</span>{% endif %}</td>
+            <td><code>{{ sub.value }}</code>{% if sub.attributes.wildcard %} <span class="tag">comodín</span>{% endif %}{% if sub.value in exposure %} <span class="tag tag-warning" title="El nombre indica que no es producción o que es una herramienta interna">{{ exposure[sub.value][0]|lower }}: {{ exposure[sub.value][1] }}</span>{% endif %}</td>
             <td>{{ ips.get(sub.value, [])|join(", ") or "—" }}</td>
             <td>
               {% set edge = edges.get(sub.value) %}

@@ -1,0 +1,60 @@
+{% extends "partials/tabs.html" %}
+{% set active = "changes" %}
+
+{% block tab %}
+{% if not previous %}
+  <p class="muted">No hay ningún escaneo anterior terminado de <code>{{ scan.target }}</code> con el que comparar. Usa «Actualizar» en Proyectos más adelante para ver qué cambia.</p>
+{% else %}
+  <form class="compare-with" hx-get="/scans/{{ scan.id }}/tabs/changes" hx-target="#results" hx-trigger="change">
+    <label>
+      Comparar con
+      <select name="against">
+        {% for option in options %}
+          <option value="{{ option.id }}"{{ " selected" if option.id == previous.id }}>
+            {{ option.created_at.strftime("%d/%m/%Y %H:%M") }} · {{ "ligero" if option.allow_light else "pasivo" }} · profundidad {{ option.depth }}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+    <a href="/scans/{{ previous.id }}">Abrir ese escaneo →</a>
+  </form>
+
+  {% for note in diff.caveats %}
+    <p class="notice">{{ note }}</p>
+  {% endfor %}
+
+  {% if not diff.has_changes %}
+    <p class="muted">Nada ha cambiado entre los dos escaneos.</p>
+  {% endif %}
+
+  {% for change in diff.changes if not change.empty %}
+    <section class="panel change">
+      <h3>
+        {{ change.label }}
+        {% if change.added %}<span class="tag tag-warning">+{{ change.added|length }} nuevo{{ "s" if change.added|length != 1 }}</span>{% endif %}
+        {% if change.removed %}<span class="tag">−{{ change.removed|length }} ya no aparece{{ "n" if change.removed|length != 1 }}</span>{% endif %}
+        {% if change.changed %}<span class="tag">{{ change.changed|length }} cambiado{{ "s" if change.changed|length != 1 }}</span>{% endif %}
+      </h3>
+      {% if change.added %}
+        <details{{ " open" if change.added|length <= 15 }}>
+          <summary>Nuevos</summary>
+          <ul class="change-list added">{% for item in change.added[:200] %}<li>{{ item }}</li>{% endfor %}</ul>
+          {% if change.added|length > 200 %}<p class="muted">y {{ change.added|length - 200 }} más (en el informe JSON).</p>{% endif %}
+        </details>
+      {% endif %}
+      {% if change.changed %}
+        <ul class="change-list changed">{% for item in change.changed[:200] %}<li>{{ item }}</li>{% endfor %}</ul>
+      {% endif %}
+      {% if change.removed %}
+        <details>
+          <summary>Ya no aparecen</summary>
+          <ul class="change-list removed">{% for item in change.removed[:200] %}<li>{{ item }}</li>{% endfor %}</ul>
+          {% if change.removed|length > 200 %}<p class="muted">y {{ change.removed|length - 200 }} más (en el informe JSON).</p>{% endif %}
+        </details>
+      {% endif %}
+    </section>
+  {% endfor %}
+
+  <p class="muted">Que algo "ya no aparezca" no siempre significa que se haya retirado: la fuente puede no haberlo devuelto esta vez. Las IPs de las CDN (Cloudflare, CloudFront…) cambian a menudo sin que cambie nada importante.</p>
+{% endif %}
+{% endblock %}

@@ -19,7 +19,9 @@ from reconmap.edge_assessment import ip_provider
 from reconmap.insights import SENSITIVE_PATHS, ScanIndex, edge_overview, node_id, short_label
 from reconmap.mail_assessment import assess
 from reconmap.models import Entity, EntityType, RelationType, Scan
+from reconmap.report.diff import comparable_scans, diff_scans, host_cnames
 from reconmap.store import Store
+from reconmap.third_parties import ThirdParties, find_third_parties
 
 
 class ReportLevel(StrEnum):
@@ -58,7 +60,7 @@ def build_report(
             "relations": [r.model_dump(mode="json") for r in store.relations(scan_id)],
             "findings": [],
         }
-    view = _ScanView(scan, ScanIndex(store, scan_id, now=now))
+    view = _ScanView(scan, ScanIndex(store, scan_id, now=now), store)
     return view.compact() if level is ReportLevel.COMPACT else view.summary()
 
 
@@ -69,7 +71,8 @@ def report_filename(target: str, scan_id: str, level: ReportLevel) -> str:
 class _ScanView:
     """Vista aplanada de un escaneo, común a los niveles comprimido y resumen."""
 
-    def __init__(self, scan: Scan, index: ScanIndex) -> None:
+    def __init__(self, scan: Scan, index: ScanIndex, store: Store) -> None:
+        self.store = store
         self.scan = scan
         self.index = index
         by_type: dict[EntityType, list[Entity]] = defaultdict(list)
@@ -125,6 +128,8 @@ class _ScanView:
                 "rows": [self._cve_row(c) for c in self._relevant_cves()],
             },
             "certificates": self._certificates(),
+            "third_parties": self._third_parties().as_dict(),
+            "changes_since_previous": self._changes(limit=100),
             "wayback": {
                 "total": len(self.by_type[EntityType.URL]),
                 "sensitive": self._sensitive_urls(),
@@ -160,6 +165,11 @@ class _ScanView:
                 if c.control == "Certificado"
             ),
             "sensitive_urls": len(self._sensitive_urls()),
+            "third_parties": {
+                category: [p.name for p in providers]
+                for category, providers in self._third_parties().by_category()
+            },
+            "changes_since_previous": self._changes(limit=15),
             "module_errors": {
                 p.module: _clean(p.error or f"{p.errors} errores")
                 for p in self.scan.progress
@@ -334,6 +344,21 @@ class _ScanView:
                 for c in self._relevant_cves()[:10]
             ],
         }
+
+    def _third_parties(self) -> ThirdParties:
+        root = self._root()
+        hosts = [e for t in HOST_TYPES for e in self.by_type[t]]
+        return find_third_parties(
+            self.scan.target,
+            root.attributes.get("dns") if root else None,
+            {h.value: host_cnames(h) for h in hosts},
+        )
+
+    def _changes(self, limit: int) -> dict[str, object] | None:
+        options = comparable_scans(self.store, self.scan)
+        if not options:
+            return None
+        return diff_scans(self.store, options[0], self.scan).as_dict(limit)
 
     def _certificates(self) -> dict[str, object]:
         certificates = self.by_type[EntityType.CERTIFICATE]

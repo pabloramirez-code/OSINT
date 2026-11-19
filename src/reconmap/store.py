@@ -179,7 +179,10 @@ class Store:
         return scan
 
     def list_scans(self, limit: int = 20) -> list[Scan]:
-        rows = self._query("SELECT * FROM scans ORDER BY created_at DESC LIMIT ?", (limit,))
+        # rowid desempata escaneos creados en el mismo instante (el reloj de Windows es grueso).
+        rows = self._query(
+            "SELECT * FROM scans ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)
+        )
         return [self._row_to_scan(row) for row in rows]
 
     def count_targets(self) -> int:

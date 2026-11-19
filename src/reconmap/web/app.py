@@ -24,7 +24,7 @@ from reconmap.store import Store
 from reconmap.web import views
 
 WEB_DIR = Path(__file__).parent
-TABS = {"summary", "subdomains", "ips", "tech", "graph", "mail", "web", "json"}
+TABS = {"summary", "changes", "subdomains", "ips", "tech", "graph", "mail", "web", "json"}
 
 templates = Jinja2Templates(
     env=Environment(loader=FileSystemLoader(WEB_DIR / "templates"), autoescape=True)
@@ -153,10 +153,15 @@ def create_app(
         return render(request, "partials/progress.html", context)
 
     @app.get("/scans/{scan_id}/tabs/{tab}", response_class=HTMLResponse)
-    async def scan_tab(request: Request, scan_id: str, tab: str) -> HTMLResponse:
+    async def scan_tab(
+        request: Request, scan_id: str, tab: str, against: str | None = None
+    ) -> HTMLResponse:
         scan = get_scan(scan_id)
         if tab not in TABS:
             raise HTTPException(404, "Pestaña desconocida")
+        if tab == "changes":
+            context = {"scan": scan, **views.changes(store, scan, against)}
+            return render(request, "partials/tab_changes.html", context)
         context = {"scan": scan, **tab_context(scan, tab)}
         return render(request, f"partials/tab_{tab}.html", context)
 

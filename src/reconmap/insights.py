@@ -84,6 +84,55 @@ CVE_ADVICE = (
 )
 HIGH_CVSS = 7.0
 
+# Palabras del nombre del host (etiquetas separadas por "." "-" "_", sin números finales).
+# Solo palabras completas: "des" o "pre" darían demasiados falsos positivos.
+NON_PRODUCTION = frozenset(
+    {
+        "dev",
+        "devel",
+        "develop",
+        "development",
+        "desarrollo",
+        "desa",
+        "test",
+        "testing",
+        "tests",
+        "qa",
+        "uat",
+        "staging",
+        "stage",
+        "stg",
+        "preprod",
+        "preproduccion",
+        "sandbox",
+        "demo",
+        "beta",
+        "old",
+        "legacy",
+        "backup",
+        "bak",
+        "tmp",
+        "temp",
+        "prueba",
+        "pruebas",
+        "poc",
+        "lab",
+        "labs",
+    }
+)
+INTERNAL_TOOLS = frozenset(
+    {
+        "grafana", "prometheus", "alertmanager", "kibana", "elasticsearch", "jenkins",
+        "gitlab", "sonarqube", "sonar", "argocd", "portainer", "phpmyadmin", "pma", "adminer",
+        "pgadmin", "rancher", "k8s", "kubernetes", "traefik", "minio", "rabbitmq", "airflow",
+        "jupyter", "vault", "consul", "nexus", "harbor", "zabbix", "nagios", "webmin",
+    }
+)  # fmt: skip
+EXPOSURE_ADVICE = (
+    "Suelen tener menos parches y controles que producción, y a veces datos reales. "
+    "Comprueba si debe ser público; si no, restríngelo (VPN, lista de IPs o autenticación)."
+)
+
 
 @dataclass(frozen=True)
 class NodeInsights:
@@ -206,6 +255,10 @@ class ScanIndex:
             )
         self._edges[nid] = result
         return result
+
+    def _target(self) -> str:
+        roots = [e.value for e in self.entities.values() if e.type is EntityType.DOMAIN]
+        return roots[0] if roots else ""
 
     def root_edge_provider(self) -> str | None:
         roots = [n for n, e in self.entities.items() if e.type is EntityType.DOMAIN]
@@ -336,6 +389,21 @@ class ScanIndex:
                 Check("Host", Status.OK, "Sin problemas detectados con los datos disponibles")
             )
         edge = self.edge(nid)
+        exposure = environment_kind(host.value, self._target())
+        if exposure and ips:
+            kind, word = exposure
+            private_only = edge is not None and edge.private
+            behind = edge is not None and edge.status is WafStatus.POSSIBLE
+            problems.append(
+                Check(
+                    kind,
+                    Status.INFO if private_only else Status.WARN,
+                    f"{kind} con nombre «{word}»"
+                    + (" (solo IPs privadas)" if private_only else " accesible desde Internet"),
+                    EXPOSURE_ADVICE
+                    + (" Pasa por un posible WAF, pero sigue siendo público." if behind else ""),
+                )
+            )
         if edge is not None:
             problems.append(Check("WAF", Status.INFO, edge.label, "; ".join(edge.evidence)))
             if self.outside_proxy(nid):
@@ -630,6 +698,19 @@ def edge_overview(index: ScanIndex) -> EdgeOverview:
         outside=outside,
         root_label=root_label,
     )
+
+
+def environment_kind(host: str, target: str) -> tuple[str, str] | None:
+    """("Entorno no productivo", "staging") para staging.ejemplo.com; None si no lo parece."""
+    name = host.removesuffix(target).rstrip(".") if target else host
+    words = [re.sub(r"\d+$", "", w) for w in re.split(r"[.\-_]", name.lower()) if w]
+    for word in words:
+        if word in NON_PRODUCTION:
+            return "Entorno no productivo", word
+    for word in words:
+        if word in INTERNAL_TOOLS:
+            return "Herramienta interna", word
+    return None
 
 
 def short_label(entity: Entity) -> str:

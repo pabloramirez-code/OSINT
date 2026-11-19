@@ -724,6 +724,24 @@ Sin `uv` en el PATH (Windows, PowerShell, desde la raíz del proyecto):
   formulario "Volver a escanear" (botón Actualizar) que reutiliza `POST /scans`.
   Mantiene la profundidad del último escaneo, pero el modo **siempre vuelve a
   Pasivo**: el Ligero se elige en cada escaneo (regla 1), nunca se hereda.
+- Ideas aprobadas por el usuario (2026-11-19), hechas:
+  - **Cambios** (`report/diff.py`): compara con el escaneo terminado anterior del
+    mismo dominio (selector para elegir otro). Problemas por host, hosts que
+    resuelven, subdominios, IPs, puertos, tecnologías, CVEs, certificados,
+    proveedores, posible WAF y riesgo de correo. Avisa si cambian modo,
+    profundidad, fuentes con error o fuentes nuevas. Pestaña Cambios, panel en
+    Resumen y `changes_since_previous` en los informes. `list_scans` desempata
+    por `rowid` (el reloj de Windows repite instantes) y no trae el progreso:
+    `diff_scans` recarga los escaneos con `get_scan`.
+  - **Entornos no productivos y herramientas internas** (`environment_kind` en
+    `insights.py`): palabras completas del nombre (`staging`, `dev`,
+    `desarrollo`, `grafana`…). `warn` si resuelve a IP pública (aunque pase por
+    WAF); `info` si solo tiene IPs privadas. Etiqueta en Subdominios.
+  - **Proveedores externos** (`third_parties.py`, puro, sin red): TXT de
+    verificación (los tokens nunca se muestran), `include:` del SPF, MX, NS y
+    CNAME. Lo desconocido se lista ("sin identificar"), no se adivina. Los TXT
+    partidos se concatenan sin tocar espacios (RFC 7208). Panel en Resumen y
+    `third_parties` en los informes.
 - Notas:
   - `normalize_domain` devuelve `Domain(name, wildcard)` (NamedTuple).
   - IDNA con el códec estándar de Python (IDNA 2003), sin dependencia extra.

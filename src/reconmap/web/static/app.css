@@ -602,3 +602,12 @@ details > summary { cursor: pointer; }
 .rescan-label { font-weight: 600; }
 .rescan > div:empty { display: none; }
 .rescan > div { flex-basis: 100%; }
+
+/* Pestaña Cambios */
+.compare-with { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 12px; }
+.change h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.change-list { margin: 8px 0 0; padding-left: 20px; overflow-wrap: anywhere; }
+.change-list li { margin: 2px 0; }
+.change-list.added li::marker { content: "+ "; color: var(--warning); }
+.change-list.removed li::marker { content: "− "; color: var(--muted); }
+.change-list.changed li::marker { content: "~ "; color: var(--accent); }

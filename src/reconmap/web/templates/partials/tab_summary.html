@@ -71,6 +71,40 @@
   </section>
 {% endif %}
 
+{% if changes %}
+  <section class="panel">
+    <h3>Cambios desde el {{ changes.previous.created_at.strftime("%d/%m/%Y %H:%M") }}</h3>
+    {% if changes.rows %}
+      <dl>
+        {% for label, added, removed, changed in changes.rows %}
+          <dt>{{ label }}</dt>
+          <dd>{% if added %}<span class="tag tag-warning">+{{ added }}</span> {% endif %}{% if removed %}<span class="tag">−{{ removed }}</span> {% endif %}{% if changed %}<span class="tag">{{ changed }} cambiados</span>{% endif %}</dd>
+        {% endfor %}
+      </dl>
+    {% else %}
+      <p class="muted">Nada ha cambiado.</p>
+    {% endif %}
+    {% if changes.caveats %}<p class="muted">Hay {{ changes.caveats }} aviso(s) sobre la comparación.</p>{% endif %}
+    <p><button class="button-secondary" hx-get="/scans/{{ scan.id }}/tabs/changes" hx-target="#results">Ver el detalle</button></p>
+  </section>
+{% endif %}
+
+{% if third_parties.providers %}
+  <section class="panel">
+    <h3>Proveedores externos</h3>
+    <dl>
+      {% for category, providers in third_parties.by_category() %}
+        <dt>{{ category }}</dt>
+        <dd>{% for provider in providers %}<span class="tag" title="{{ provider.evidence[:6]|join('; ') }}">{{ provider.name }}</span> {% endfor %}</dd>
+      {% endfor %}
+      {% if third_parties.unknown_spf %}<dt>SPF sin identificar</dt><dd>{% for host in third_parties.unknown_spf %}<code>{{ host }}</code> {% endfor %}</dd>{% endif %}
+      {% if third_parties.unknown_mx %}<dt>MX sin identificar</dt><dd>{% for host in third_parties.unknown_mx %}<code>{{ host }}</code> {% endfor %}</dd>{% endif %}
+      {% if third_parties.unknown_cname %}<dt>CNAME sin identificar</dt><dd>{% for host in third_parties.unknown_cname[:10] %}<code>{{ host }}</code> {% endfor %}{% if third_parties.unknown_cname|length > 10 %}<span class="muted">y {{ third_parties.unknown_cname|length - 10 }} más</span>{% endif %}</dd>{% endif %}
+    </dl>
+    <p class="muted">Sacado del DNS ya consultado: TXT de verificación ({{ third_parties.unidentified_txt }} sin identificar; los tokens no se muestran), <code>include:</code> del SPF, MX, NS y CNAME de los subdominios. Pasa el ratón por cada proveedor para ver de dónde sale.</p>
+  </section>
+{% endif %}
+
 {% if requests %}
   <section class="panel">
     <h3>Peticiones por fuente</h3>

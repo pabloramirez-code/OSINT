@@ -7,10 +7,18 @@ from dataclasses import dataclass, field
 from reconmap.checks import SEVERITY_ORDER, Status
 from reconmap.edge_assessment import ip_provider
 from reconmap.headers_assessment import assess_host
-from reconmap.insights import ScanIndex, edge_overview, node_id, short_label
+from reconmap.insights import (
+    ScanIndex,
+    edge_overview,
+    environment_kind,
+    node_id,
+    short_label,
+)
 from reconmap.mail_assessment import RISK_CRITERIA, MailAssessment, assess
 from reconmap.models import Entity, EntityType, RelationType, Scan
+from reconmap.report.diff import comparable_scans, diff_scans, host_cnames
 from reconmap.store import Store
+from reconmap.third_parties import ThirdParties, find_third_parties
 
 
 @dataclass(frozen=True)
@@ -89,6 +97,42 @@ def summary(store: Store, scan: Scan, max_hosts: int) -> dict[str, object]:
         "requests": [(run.label, run.requests) for run in scan.progress if run.requests],
         "mail_risk": _assessment(root).risk if isinstance(root.get("mail"), dict) else None,
         "edge": edge_overview(ScanIndex(store, scan.id)),
+        "third_parties": third_parties(store, scan),
+        "changes": _changes_overview(store, scan),
+    }
+
+
+def third_parties(store: Store, scan: Scan) -> ThirdParties:
+    roots = store.entities(scan.id, EntityType.DOMAIN)
+    root_dns = roots[0].attributes.get("dns") if roots else None
+    hosts = [*roots, *store.entities(scan.id, EntityType.SUBDOMAIN)]
+    return find_third_parties(scan.target, root_dns, {h.value: host_cnames(h) for h in hosts})
+
+
+def changes(store: Store, scan: Scan, against: str | None = None) -> dict[str, object]:
+    """Comparación con un escaneo anterior del mismo dominio (por defecto, el último)."""
+    options = comparable_scans(store, scan)
+    previous = next((s for s in options if s.id == against), options[0] if options else None)
+    return {
+        "options": options,
+        "previous": previous,
+        "diff": diff_scans(store, previous, scan) if previous else None,
+    }
+
+
+def _changes_overview(store: Store, scan: Scan) -> dict[str, object] | None:
+    options = comparable_scans(store, scan)
+    if not options:
+        return None
+    diff = diff_scans(store, options[0], scan)
+    return {
+        "previous": options[0],
+        "rows": [
+            (c.label, len(c.added), len(c.removed), len(c.changed))
+            for c in diff.changes
+            if not c.empty
+        ],
+        "caveats": len(diff.caveats),
     }
 
 
@@ -108,6 +152,11 @@ def subdomains(store: Store, scan: Scan) -> dict[str, object]:
         },
         "outside": {sub.value for sub in subs if index.outside_proxy(node_id(sub.type, sub.value))},
         "ips": {host: sorted(set(values)) for host, values in ips.items()},
+        "exposure": {
+            sub.value: kind
+            for sub in subs
+            if sub.value in ips and (kind := environment_kind(sub.value, scan.target))
+        },
         "first_seen": store.first_seen_anywhere(scan.id, EntityType.SUBDOMAIN),
     }
 
