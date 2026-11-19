@@ -1,0 +1,74 @@
+{% extends "partials/tabs.html" %}
+{% set active = "versions" %}
+
+{% block tab %}
+<div class="cards">
+  {% for label, count in counts.items() %}
+    <div class="card-stat"><span class="card-value">{{ count }}</span><span class="card-label">{{ label }}</span></div>
+  {% endfor %}
+</div>
+
+{% if with_version %}
+  <section class="panel">
+    <h3>Versiones detectadas</h3>
+    <input type="search" class="table-filter" placeholder="Filtrar productos, versiones, hosts…" data-filter="#version-table">
+    <div class="table-wrap">
+      <table id="version-table" class="data-table">
+        <thead>
+          <tr>
+            <th data-sort>Producto</th>
+            <th data-sort>Versión</th>
+            <th data-sort>Dónde</th>
+            <th data-sort>Fuente</th>
+            <th data-sort>CVEs</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for product in with_version %}
+            {% for item in product.versions %}
+              <tr>
+                <td>
+                  <div class="cell-list">
+                    <strong>{{ product.name }}</strong>
+                    {% if product.several and loop.first %}<span class="tag tag-warning" title="El mismo producto corre en versiones distintas: suele indicar servidores sin actualizar">{{ product.versions|length }} versiones distintas</span>{% endif %}
+                    {% if product.unversioned_where and loop.first %}<span class="muted">también visto sin versión en {{ product.unversioned_where|length }} sitio{{ "s" if product.unversioned_where|length != 1 }}</span>{% endif %}
+                  </div>
+                </td>
+                <td class="nowrap"><code>{{ item.version }}</code>{% if product.several and loop.first %} <span class="muted">(la más alta)</span>{% endif %}</td>
+                <td><div class="cell-list">{% for host in item.where[:8] %}<code>{{ host }}</code>{% endfor %}{% if item.where|length > 8 %}<span class="muted">y {{ item.where|length - 8 }} más</span>{% endif %}</div></td>
+                <td>{{ item.sources|join(", ") or "—" }}</td>
+                <td class="nowrap">
+                  {% if item.cves %}
+                    {{ item.cves }}{% if item.max_cvss is not none %} · máx. {{ "%.1f"|format(item.max_cvss) }}{% endif %}
+                    {% if item.kev %}<span class="tag tag-danger">{{ item.kev }} KEV</span>{% endif %}
+                  {% else %}
+                    <span class="muted">{{ "ninguna" if item.lookup == "hecho" else item.lookup }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">El detalle de cada CVE está en la pestaña Tecnologías. Una versión "reportada" puede llevar parches de la distribución sin cambiar el número.</p>
+  </section>
+{% endif %}
+
+{% if without_version %}
+  <section class="panel">
+    <h3>Detectados sin versión</h3>
+    <dl>
+      {% for product in without_version %}
+        <dt>{{ product.name }}</dt>
+        <dd>{% for host in product.unversioned_where[:8] %}<code>{{ host }}</code> {% endfor %}{% if product.unversioned_where|length > 8 %}<span class="muted">y {{ product.unversioned_where|length - 8 }} más</span>{% endif %}</dd>
+      {% endfor %}
+    </dl>
+    <p class="muted">Sin versión no se pueden buscar CVEs. El modo Ligero (cabeceras <code>server</code>/<code>x-powered-by</code>) a veces la revela; el modo Activo con httpx, si se aprueba, la leería del HTML.</p>
+  </section>
+{% endif %}
+
+{% if not with_version and not without_version %}
+  <p class="muted">No se han detectado tecnologías en este escaneo. Salen de los CPE de Shodan InternetDB y, en modo Ligero, de cabeceras y cookies.</p>
+{% endif %}
+{% endblock %}

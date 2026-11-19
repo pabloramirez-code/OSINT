@@ -24,7 +24,18 @@ from reconmap.store import Store
 from reconmap.web import views
 
 WEB_DIR = Path(__file__).parent
-TABS = {"summary", "changes", "subdomains", "ips", "tech", "graph", "mail", "web", "json"}
+TABS = {
+    "summary",
+    "changes",
+    "subdomains",
+    "ips",
+    "tech",
+    "versions",
+    "graph",
+    "mail",
+    "web",
+    "json",
+}
 
 templates = Jinja2Templates(
     env=Environment(loader=FileSystemLoader(WEB_DIR / "templates"), autoescape=True)
@@ -174,6 +185,8 @@ def create_app(
             return views.ips(store, scan)
         if tab == "tech":
             return views.technologies(store, scan)
+        if tab == "versions":
+            return views.versions(store, scan)
         if tab == "mail":
             return views.mail(store, scan)
         if tab == "web":

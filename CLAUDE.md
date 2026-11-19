@@ -742,6 +742,13 @@ Sin `uv` en el PATH (Windows, PowerShell, desde la raíz del proyecto):
     CNAME. Lo desconocido se lista ("sin identificar"), no se adivina. Los TXT
     partidos se concatenan sin tocar espacios (RFC 7208). Panel en Resumen y
     `third_parties` en los informes.
+- Pestaña **Versiones** (2026-11-19, pedida por el usuario): tecnologías
+  agrupadas por producto, cada versión con dónde corre (IP · hosts que apuntan
+  a ella), fuente (InternetDB o cabeceras) y CVEs; marca productos con varias
+  versiones a la vez y lista aparte los detectados sin versión.
+- **Modo Activo**: propuesta en `docs/propuesta-modo-activo.md` (httpx, tlsx,
+  gowitness; lista blanca + confirmación). **Pendiente de aprobación**: cambia la
+  regla 1 y la sección 8. No escribir código hasta que el usuario la apruebe.
 - Notas:
   - `normalize_domain` devuelve `Domain(name, wildcard)` (NamedTuple).
   - IDNA con el códec estándar de Python (IDNA 2003), sin dependencia extra.

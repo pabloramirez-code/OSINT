@@ -303,6 +303,125 @@ def _cve_rows(index: ScanIndex, cves: list[Entity], with_affected: bool = False)
     return rows
 
 
+SOURCE_LABELS = {
+    "internetdb": "Shodan InternetDB (CPE)",
+    "headers": "Cabeceras o cookies (modo Ligero)",
+}
+
+
+@dataclass(frozen=True)
+class VersionSeen:
+    version: str
+    where: list[str]
+    sources: list[str]
+    cves: int
+    max_cvss: float | None
+    kev: int
+    lookup: str
+
+
+@dataclass(frozen=True)
+class ProductVersions:
+    name: str
+    product: str  # vendor:product del CPE
+    versions: list[VersionSeen]
+    unversioned_where: list[str]
+
+    @property
+    def several(self) -> bool:
+        return len(self.versions) > 1
+
+
+@dataclass
+class _ProductGroup:
+    name: str
+    versions: list[VersionSeen] = field(default_factory=list)
+    unversioned: set[str] = field(default_factory=set)
+
+
+def versions(store: Store, scan: Scan) -> dict[str, object]:
+    """Versiones detectadas, agrupadas por producto, con dónde corre cada una."""
+    index = ScanIndex(store, scan.id)
+    sources: dict[str, set[str]] = defaultdict(set)
+    for relation in store.relations(scan.id):
+        if relation.type is RelationType.USES_TECHNOLOGY:
+            sources[relation.to_ref.value].add(SOURCE_LABELS.get(relation.source, relation.source))
+    groups: dict[str, _ProductGroup] = {}
+    for tech in store.entities(scan.id, EntityType.TECHNOLOGY):
+        vendor, product = [*tech.value.split(":"), "", ""][:2]
+        group = groups.setdefault(
+            f"{vendor}:{product}", _ProductGroup(str(tech.attributes.get("name") or product))
+        )
+        nid = node_id(tech.type, tech.value)
+        users = index.neighbours(nid, RelationType.USES_TECHNOLOGY, incoming=True)
+        version = tech.attributes.get("version")
+        if not version:
+            group.unversioned.update(_where(index, u) for u in users)
+            continue
+        cves = index.neighbours(nid, RelationType.HAS_VULNERABILITY)
+        scores = [score for c in cves if (score := _score(c)) is not None]
+        group.versions.append(
+            VersionSeen(
+                version=str(version),
+                where=[_where(index, u) for u in users],
+                sources=sorted(sources[tech.value]),
+                cves=len(cves),
+                max_cvss=max(scores) if scores else None,
+                kev=sum(_is_kev(c) for c in cves),
+                lookup=str(tech.attributes.get("cve_lookup") or "pendiente"),
+            )
+        )
+    products = [
+        ProductVersions(
+            name=group.name,
+            product=key,
+            versions=sorted(group.versions, key=lambda v: _version_key(v.version), reverse=True),
+            unversioned_where=sorted(group.unversioned),
+        )
+        for key, group in groups.items()
+    ]
+    with_version = sorted(
+        (p for p in products if p.versions), key=lambda p: (not p.several, p.name.lower())
+    )
+    without_version = sorted((p for p in products if not p.versions), key=lambda p: p.name.lower())
+    return {
+        "with_version": with_version,
+        "without_version": without_version,
+        "counts": {
+            "Productos": len(products),
+            "Con versión exacta": len(with_version),
+            "Con varias versiones": sum(p.several for p in with_version),
+            "Sin versión": len(without_version),
+        },
+    }
+
+
+def _where(index: ScanIndex, user: Entity) -> str:
+    """Una IP sola dice poco: se añaden los hosts que apuntan a ella."""
+    if user.type is not EntityType.IP:
+        return user.value
+    hosts = index.neighbours(
+        node_id(user.type, user.value), RelationType.RESOLVES_TO, incoming=True
+    )
+    names = ", ".join(h.value for h in hosts[:4]) + (" …" if len(hosts) > 4 else "")
+    return f"{user.value} · {names}" if names else user.value
+
+
+def _version_key(version: str) -> tuple[int, ...]:
+    return tuple(int(n) for n in re.findall(r"\d+", version))
+
+
+def _score(cve: Entity) -> float | None:
+    raw = cve.attributes.get("nvd")
+    score = raw.get("cvss") if isinstance(raw, dict) else None
+    return float(score) if isinstance(score, int | float) else None
+
+
+def _is_kev(cve: Entity) -> bool:
+    raw = cve.attributes.get("nvd")
+    return isinstance(raw, dict) and raw.get("kev") is True
+
+
 def mail(store: Store, scan: Scan) -> dict[str, object]:
     roots = store.entities(scan.id, EntityType.DOMAIN)
     root = roots[0].attributes if roots else {}
