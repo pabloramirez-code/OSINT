@@ -636,6 +636,14 @@ Sin `uv` en el PATH (Windows, PowerShell, desde la raíz del proyecto):
 .\.venv\Scripts\python.exe -m pytest
 ```
 
+Contenedor (Docker Desktop arrancado):
+
+```bash
+docker compose up -d --build         # http://127.0.0.1:8000 (solo local)
+docker compose exec reconmap reconmap scan ejemplo.com
+docker compose down
+```
+
 ---
 
 ## 7. Forma de trabajar (para Claude Code)
@@ -786,6 +794,17 @@ Sin `uv` en el PATH (Windows, PowerShell, desde la raíz del proyecto):
     host. Certificado real autofirmado/no coincide → `warn`; caducado → `fail`.
   - Nunca usar `-pd`/`-dashboard` (subirían resultados a la nube de
     ProjectDiscovery).
+- **Despliegue en Docker** (2026-11-19, pedido por el usuario; adelanta parte de
+  la Fase 5): `Dockerfile` multi-stage sobre la imagen oficial de gowitness
+  (Debian 13 + Chrome), con tlsx y httpx copiados de las suyas (todas por
+  digest), Python 3.12 y dependencias de `uv.lock` con uv 0.13.6. Usuario
+  10001, `cap_drop: ALL`, `no-new-privileges`, puerto solo en 127.0.0.1
+  (`compose.yaml`), datos en el volumen `reconmap-data`. Dentro del contenedor
+  `RECONMAP_TOOLS_RUNNER=local`: los binarios se ejecutan directamente, sin
+  docker.sock. httpx de ProjectDiscovery va como `httpx-toolkit` porque `httpx`
+  es el CLI del paquete de Python. `RECONMAP_HOST` (0.0.0.0 solo en el
+  contenedor). Probado: las tres herramientas funcionan sin privilegios.
+  Pendiente de la Fase 5: k3s, Tailscale y autenticación.
 - Notas:
   - `normalize_domain` devuelve `Domain(name, wildcard)` (NamedTuple).
   - IDNA con el códec estándar de Python (IDNA 2003), sin dependencia extra.

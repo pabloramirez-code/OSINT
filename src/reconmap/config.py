@@ -26,7 +26,9 @@ class Settings:
     data_dir: Path = field(
         default_factory=lambda: Path(os.environ.get("RECONMAP_DATA_DIR", "data"))
     )
-    host: str = "127.0.0.1"
+    # Solo local por defecto (regla 7). En el contenedor se escucha en 0.0.0.0, pero
+    # compose.yaml publica el puerto solo en 127.0.0.1 del equipo.
+    host: str = field(default_factory=lambda: os.environ.get("RECONMAP_HOST", "127.0.0.1"))
     port: int = 8000
     max_hosts: int = field(default_factory=lambda: _env_int("RECONMAP_MAX_HOSTS", 300))
     max_light_hosts: int = field(default_factory=lambda: _env_int("RECONMAP_MAX_LIGHT_HOSTS", 50))

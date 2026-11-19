@@ -319,3 +319,37 @@ def test_live_certificate_problem_reaches_host(store: Store, tmp_path: Path) -> 
     assert insights is not None
     check = next(c for c in insights.problems if c.control == "Certificado (hoy)")
     assert check.status is Status.WARN and "autofirmado" in check.summary
+
+
+# Modo local (dentro del contenedor)
+
+
+async def test_local_runner_uses_binaries_and_real_folder(
+    fake_exec: dict[str, object], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("RECONMAP_TOOLS_RUNNER", "local")
+    monkeypatch.setattr(docker_tools.shutil, "which", lambda name: f"/usr/local/bin/{name}")
+    await run_container(
+        docker_tools.GOWITNESS_IMAGE, ["-s", "/out/shots", "-x", "/outro"], ["a.b"], 5, tmp_path
+    )
+    args = fake_exec["args"]
+    assert args[0] == "/usr/local/bin/gowitness"  # type: ignore[index]
+    assert "docker" not in args  # type: ignore[operator]
+    out = str(tmp_path.resolve())
+    assert list(args[1:]) == ["-s", f"{out}/shots", "-x", "/outro"]  # type: ignore[index]
+
+
+async def test_local_runner_uses_httpx_toolkit(
+    fake_exec: dict[str, object], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("RECONMAP_TOOLS_RUNNER", "local")
+    monkeypatch.setattr(docker_tools.shutil, "which", lambda name: f"/bin/{name}")
+    await run_container(docker_tools.HTTPX_IMAGE, [], ["a.b"], 5)
+    assert fake_exec["args"][0] == "/bin/httpx-toolkit"  # type: ignore[index]
+
+
+async def test_local_runner_missing_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RECONMAP_TOOLS_RUNNER", "local")
+    monkeypatch.setattr(docker_tools.shutil, "which", lambda name: None)
+    with pytest.raises(ModuleError, match="modo local"):
+        await run_container(TLSX_IMAGE, [], ["a.b"], 5)

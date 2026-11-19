@@ -10,6 +10,7 @@ Seguridad:
 """
 
 import asyncio
+import os
 import shlex
 import shutil
 import time
@@ -33,6 +34,12 @@ GOWITNESS_IMAGE = (
     "39bbbcd07b37c523de3f1447cb8046cb586e91ed3b0c80436922a403ffeddc1c"
 )  # v3.2.2
 MAX_STDERR = 300
+# Modo "local" (dentro del contenedor de reconmap, ver Dockerfile): los mismos programas,
+# copiados de esas imágenes, se ejecutan directamente. Así reconmap no necesita controlar
+# Docker desde dentro (montar docker.sock daría control total del equipo anfitrión).
+# httpx-toolkit: "httpx" es también el CLI del paquete httpx de Python (mismo nombre).
+BINARIES = {TLSX_IMAGE: "tlsx", HTTPX_IMAGE: "httpx-toolkit", GOWITNESS_IMAGE: "gowitness"}
+RUNNER_ENV = "RECONMAP_TOOLS_RUNNER"
 
 
 @dataclass(frozen=True)
@@ -61,6 +68,22 @@ def docker_available() -> bool:
     return shutil.which("docker") is not None
 
 
+def runner() -> str:
+    """ "docker" (por defecto, en el equipo) o "local" (binarios dentro del contenedor)."""
+    return "local" if os.environ.get(RUNNER_ENV, "").strip().lower() == "local" else "docker"
+
+
+def _local_command(image: str, args: list[str], mount: Path | None) -> list[str]:
+    binary = shutil.which(BINARIES[image])
+    if binary is None:
+        raise ModuleError(f"No se encuentra {BINARIES[image]} (modo local)")
+    if mount is not None:
+        mount.mkdir(parents=True, exist_ok=True)
+        out = str(mount.resolve())
+        args = [out + a[len("/out") :] if a == "/out" or a.startswith("/out/") else a for a in args]
+    return [binary, *args]
+
+
 async def run_container(
     image: str,
     args: list[str],
@@ -68,14 +91,19 @@ async def run_container(
     timeout: float,
     mount: Path | None = None,
 ) -> ToolRun:
-    """`docker run --rm -i --pull never [-v mount:/out] image args…` con los hosts por stdin."""
-    if not docker_available():
-        raise ModuleError("Docker no está instalado o no está en el PATH")
-    command = ["docker", "run", "--rm", "-i", "--pull", "never"]
-    if mount is not None:
-        mount.mkdir(parents=True, exist_ok=True)
-        command += ["-v", f"{mount.resolve()}:/out"]
-    command += [image, *args]
+    """`docker run --rm -i --pull never [-v mount:/out] image args…` con los hosts por stdin.
+
+    En modo local ejecuta el binario equivalente con los mismos argumentos."""
+    if runner() == "local":
+        command = _local_command(image, args, mount)
+    else:
+        if not docker_available():
+            raise ModuleError("Docker no está instalado o no está en el PATH")
+        command = ["docker", "run", "--rm", "-i", "--pull", "never"]
+        if mount is not None:
+            mount.mkdir(parents=True, exist_ok=True)
+            command += ["-v", f"{mount.resolve()}:/out"]
+        command += [image, *args]
     started = time.monotonic()
     process = await asyncio.create_subprocess_exec(
         *command,
