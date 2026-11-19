@@ -58,3 +58,54 @@ def test_project_names_are_escaped(client: TestClient, store: Store) -> None:
     store.update_scan(scan.id, status=ScanStatus.DONE)
     page = client.get("/projects").text
     assert XSS not in page and "&lt;b&gt;x&lt;/b&gt;" in page
+
+
+def rescan_form(page: str, target: str) -> str:
+    match = re.search(
+        r'<form class="rescan".*?name="domain" value="' + re.escape(target) + r'".*?</form>',
+        page,
+        re.S,
+    )
+    assert match, f"sin botón de actualizar para {target}"
+    return match.group(0)
+
+
+def test_each_project_has_a_rescan_button(client: TestClient, store: Store) -> None:
+    finished_scan(store, "example.com", 1)
+    finished_scan(store, "example.org", 1)
+    page = client.get("/projects").text
+    for target in ("example.com", "example.org"):
+        form = rescan_form(page, target)
+        assert 'hx-post="/scans"' in form and "Actualizar" in form
+
+
+def test_rescan_keeps_depth_but_defaults_to_passive(client: TestClient, store: Store) -> None:
+    scan = store.create_scan("example.com", depth=2, allow_light=True)
+    store.update_scan(scan.id, status=ScanStatus.DONE)
+    form = rescan_form(client.get("/projects").text, "example.com")
+    assert '<option value="2" selected>' in form
+    # El modo Ligero se elige en cada escaneo (regla 1): nunca viene marcado.
+    assert re.search(r'name="authorized" value="" checked', form)
+    assert not re.search(r'name="authorized" value="1" checked', form)
+
+
+def test_rescan_is_disabled_while_a_scan_runs(client: TestClient, store: Store) -> None:
+    finished_scan(store, "example.com", 1)
+    running = store.create_scan("example.org")
+    store.update_scan(running.id, status=ScanStatus.RUNNING)
+    form = rescan_form(client.get("/projects").text, "example.com")
+    assert "Escaneando…" in form and "disabled" in form
+
+
+def test_rescan_launches_a_new_scan(client: TestClient, store: Store) -> None:
+    first = finished_scan(store, "example.com", 1)
+    response = client.post(
+        "/scans",
+        data={"domain": "example.com", "depth": "1", "authorized": ""},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    new_id = response.headers["location"].rsplit("/", 1)[1]
+    assert new_id != first
+    scan = store.get_scan(new_id)
+    assert scan is not None and scan.target == "example.com" and not scan.allow_light

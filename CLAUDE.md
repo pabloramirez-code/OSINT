@@ -720,6 +720,10 @@ Sin `uv` en el PATH (Windows, PowerShell, desde la raíz del proyecto):
   - Pestaña **Tecnologías**, nodos en el grafo (CVEs agrupables si hay más de
     300 nodos), problemas que suben a la IP y al host, bloques `technologies` y
     `cves` en los informes. Aviso de NVD ("not endorsed or certified").
+- Proyectos (2026-11-19, pedido por el usuario): cada proyecto tiene un
+  formulario "Volver a escanear" (botón Actualizar) que reutiliza `POST /scans`.
+  Mantiene la profundidad del último escaneo, pero el modo **siempre vuelve a
+  Pasivo**: el Ligero se elige en cada escaneo (regla 1), nunca se hereda.
 - Notas:
   - `normalize_domain` devuelve `Domain(name, wildcard)` (NamedTuple).
   - IDNA con el códec estándar de Python (IDNA 2003), sin dependencia extra.

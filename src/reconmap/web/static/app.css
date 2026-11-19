@@ -596,3 +596,9 @@ details summary { cursor: pointer; color: var(--accent); }
 .cve-table { margin-top: 8px; font-size: 13px; }
 .cve-table td:last-child { min-width: 18rem; }
 details > summary { cursor: pointer; }
+
+/* Proyectos: volver a escanear */
+.rescan { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 12px 0; }
+.rescan-label { font-weight: 600; }
+.rescan > div:empty { display: none; }
+.rescan > div { flex-basis: 100%; }
