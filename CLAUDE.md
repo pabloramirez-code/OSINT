@@ -617,6 +617,15 @@ uv run ruff check . && uv run ruff format .
 uv run mypy src
 ```
 
+Sin `uv` en el PATH (Windows, PowerShell, desde la raíz del proyecto):
+
+```powershell
+.\.venv\Scripts\python.exe -m reconmap.web.app                 # interfaz
+.\.venv\Scripts\python.exe -m reconmap.cli scan ejemplo.com     # CLI
+.\.venv\Scripts\python.exe -m reconmap.cli report ejemplo.com -o resumen.json --level summary
+.\.venv\Scripts\python.exe -m pytest
+```
+
 ---
 
 ## 7. Forma de trabajar (para Claude Code)
@@ -633,6 +642,10 @@ uv run mypy src
   cambio antes de desviarse.
 - No inventar endpoints ni formatos de las APIs externas: si hay duda, pedir
   al usuario que guarde una respuesta real como fixture.
+- Para analizar un escaneo, leer primero el informe **resumen**
+  (`reconmap report <dominio|id> --level summary`); si hace falta más, el
+  **comprimido** (`--level compact`). Del **extendido** consultar solo partes
+  concretas, nunca el archivo entero (el dominio de prueba: ~1,3 MB).
 
 ---
 
@@ -660,6 +673,12 @@ uv run mypy src
   - Revisión manual de la Fase 2.
   - Fixture real del Wayback (el Archive estaba caído); los tests usan el
     formato CDX documentado.
+- En curso (2026-11-19, aprobado por el usuario): propuesta
+  `docs/propuesta-waf-y-lectura-eficiente.md`. Paso 1 hecho: informe JSON en
+  tres niveles (`?level=extended|compact|summary`, botones en la pestaña JSON,
+  `reconmap report`). Siguiente: paso 2, `edge_assessment.py` con los textos
+  "Posible WAF · <proveedor>" / "No se ha podido comprobar si existe WAF" y el
+  proveedor de la IP. Censys aplazado por el usuario.
 - Notas:
   - `normalize_domain` devuelve `Domain(name, wildcard)` (NamedTuple).
   - IDNA con el códec estándar de Python (IDNA 2003), sin dependencia extra.

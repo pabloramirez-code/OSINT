@@ -13,7 +13,7 @@ from reconmap.models import EntityType
 from reconmap.modules import default_modules
 from reconmap.normalize import InvalidDomainError, normalize_domain
 from reconmap.report.compare import compare as compare_subdomains
-from reconmap.report.json_report import build_report
+from reconmap.report.json_report import ReportLevel, build_report
 from reconmap.store import Store
 
 app = typer.Typer(help="reconmap: reconocimiento pasivo de infraestructura (CLI de depuración).")
@@ -30,6 +30,9 @@ def scan(
     domain: str,
     depth: Annotated[int, typer.Option(min=1, max=3, help="Profundidad de recursión")] = 1,
     json_out: Annotated[Path | None, typer.Option("--json", help="Guardar el informe JSON")] = None,
+    level: Annotated[
+        ReportLevel, typer.Option(help="Nivel del informe: extended, compact o summary")
+    ] = ReportLevel.EXTENDED,
 ) -> None:
     """Escanea un dominio con los módulos pasivos y muestra el resultado."""
     try:
@@ -67,10 +70,40 @@ def scan(
     console.print(f"{len(subdomains)} subdominios · estado: {result.status}")
 
     if json_out:
-        json_out.write_text(
-            json.dumps(build_report(store, scan_id), indent=2, ensure_ascii=False), encoding="utf-8"
-        )
-        console.print(f"Informe guardado en {json_out}")
+        _write_report(json_out, build_report(store, scan_id, level))
+
+
+@app.command()
+def report(
+    scan: Annotated[str, typer.Argument(help="Id del escaneo o dominio (usa su último escaneo)")],
+    out: Annotated[Path, typer.Option("--out", "-o", help="Archivo JSON de salida")],
+    level: Annotated[
+        ReportLevel, typer.Option(help="Nivel del informe: extended, compact o summary")
+    ] = ReportLevel.SUMMARY,
+) -> None:
+    """Genera el informe JSON de un escaneo ya hecho."""
+    store = Store(Settings().db_path)
+    scan_id = _resolve_scan(store, scan)
+    if scan_id is None:
+        console.print(f"[red]No hay ningún escaneo «{scan}»[/red]", markup=True, highlight=False)
+        raise typer.Exit(1)
+    _write_report(out, build_report(store, scan_id, level))
+
+
+def _resolve_scan(store: Store, scan: str) -> str | None:
+    if store.get_scan(scan) is not None:
+        return scan
+    try:
+        target = normalize_domain(scan).name
+    except InvalidDomainError:
+        return None
+    matches = [s for s in store.list_scans(limit=1000) if s.target == target]
+    return max(matches, key=lambda s: s.created_at).id if matches else None
+
+
+def _write_report(path: Path, data: dict[str, object] | None) -> None:
+    path.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
+    console.print(f"Informe guardado en {path} ({path.stat().st_size // 1024} KB)")
 
 
 @app.command()
@@ -96,3 +129,7 @@ def compare(
     if markdown:
         markdown.write_text(result.to_markdown(), encoding="utf-8")
         console.print(f"Comparación guardada en {markdown}")
+
+
+if __name__ == "__main__":
+    app()

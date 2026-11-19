@@ -19,7 +19,7 @@ from reconmap.modules import default_modules
 from reconmap.modules.base import Module
 from reconmap.normalize import InvalidDomainError, normalize_domain
 from reconmap.report.graph import build_graph
-from reconmap.report.json_report import build_report
+from reconmap.report.json_report import ReportLevel, build_report, report_filename
 from reconmap.store import Store
 from reconmap.web import views
 
@@ -193,11 +193,11 @@ def create_app(
         return JSONResponse(insights.as_dict())
 
     @app.get("/api/scans/{scan_id}/report")
-    async def scan_report(scan_id: str) -> JSONResponse:
-        report = build_report(store, scan_id)
+    async def scan_report(scan_id: str, level: ReportLevel = ReportLevel.EXTENDED) -> JSONResponse:
+        report = build_report(store, scan_id, level)
         if report is None:
             raise HTTPException(404, "Ese escaneo no existe")
-        filename = f"reconmap-{get_scan(scan_id).target}-{scan_id}.json"
+        filename = report_filename(get_scan(scan_id).target, scan_id, level)
         return JSONResponse(
             report, headers={"Content-Disposition": f'attachment; filename="{filename}"'}
         )
@@ -209,3 +209,7 @@ def main() -> None:
     load_env_file()
     settings = Settings()
     uvicorn.run(create_app, factory=True, host=settings.host, port=settings.port)
+
+
+if __name__ == "__main__":
+    main()

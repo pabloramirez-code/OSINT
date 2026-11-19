@@ -583,3 +583,9 @@ details summary { cursor: pointer; color: var(--accent); }
   .run { grid-template-columns: 1fr; gap: 4px; }
   .project-latest { margin-left: 0; }
 }
+
+/* Pestaña JSON: niveles de descarga */
+.report-levels { list-style: none; padding: 0; margin: 1rem 0 0; display: grid; gap: 0.75rem; }
+.report-levels li { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.report-levels .button { min-width: 8.5rem; text-align: center; }
+.report-levels span { color: var(--muted, #6b7280); flex: 1 1 16rem; }

@@ -2,6 +2,19 @@
 {% set active = "json" %}
 
 {% block tab %}
-<p>Informe completo del escaneo: entidades, relaciones y progreso de cada módulo.</p>
-<a class="button" href="/api/scans/{{ scan.id }}/report" download>Descargar JSON</a>
+<p>Descarga el informe del escaneo en el nivel de detalle que necesites.</p>
+<ul class="report-levels">
+  <li>
+    <a class="button" href="/api/scans/{{ scan.id }}/report?level=summary" download>Resumen</a>
+    <span>Solo lo más importante: recuentos, riesgo de correo y problemas agrupados por tipo.</span>
+  </li>
+  <li>
+    <a class="button" href="/api/scans/{{ scan.id }}/report?level=compact" download>Comprimido</a>
+    <span>Una fila por host y por IP con sus problemas; de certificados y URLs archivadas, solo lo relevante.</span>
+  </li>
+  <li>
+    <a class="button" href="/api/scans/{{ scan.id }}/report?level=extended" download>Extendido</a>
+    <span>Todo: entidades, relaciones y progreso de cada módulo. Puede ocupar varios MB.</span>
+  </li>
+</ul>
 {% endblock %}
