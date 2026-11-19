@@ -1,6 +1,7 @@
 # Propuesta: modo Activo con httpx, tlsx y gowitness
 
-Estado: **pendiente de aprobación**. Nada de esto está implementado.
+Estado: **aprobada por el usuario el 2026-11-19** (regla 1 y sección 8; Docker).
+Paso 1 (lista blanca, confirmación y modo Activo) implementado.
 Fecha: 2026-11-19.
 
 Cambia dos reglas de `CLAUDE.md` (regla 1 y sección 8), así que necesita la

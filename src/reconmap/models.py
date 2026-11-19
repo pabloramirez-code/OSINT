@@ -127,12 +127,19 @@ class Scan(BaseModel):
     target: str
     depth: int = Field(default=1, ge=1, le=3)
     allow_light: bool = False
+    allow_active: bool = False  # modo Activo: implica también el Ligero
     status: ScanStatus = ScanStatus.PENDING
     host_limit_reached: bool = False
     created_at: datetime = Field(default_factory=utcnow)
     started_at: datetime | None = None
     finished_at: datetime | None = None
     progress: list[ModuleProgress] = Field(default_factory=list)
+
+    @property
+    def mode(self) -> str:
+        if self.allow_active:
+            return "activo"
+        return "ligero" if self.allow_light else "pasivo"
 
     @property
     def is_active(self) -> bool:

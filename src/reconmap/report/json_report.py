@@ -185,7 +185,7 @@ class _ScanView:
             "id": scan.id,
             "target": scan.target,
             "date": scan.created_at.strftime("%Y-%m-%d"),
-            "mode": "ligero" if scan.allow_light else "pasivo",
+            "mode": scan.mode,
             "depth": scan.depth,
             "status": scan.status.value,
             "host_limit_reached": scan.host_limit_reached,

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from reconmap.config import HTTP_TIMEOUT_SECONDS, MODULE_TIMEOUT_SECONDS, USER_AGENT
+from reconmap.config import HTTP_TIMEOUT_SECONDS, MODULE_TIMEOUT_SECONDS, USER_AGENT, in_allowlist
 from reconmap.models import (
     Contact,
     Entity,
@@ -51,24 +51,36 @@ class Engine:
         modules: list[Module],
         keys: Mapping[str, str] | None = None,
         max_hosts: int = 300,
+        active_allowlist: tuple[str, ...] = (),
     ) -> None:
         forbidden = [m.name for m in modules if m.contact is Contact.ACTIVE]
-        if forbidden:
-            raise ContactNotAllowedError(f"Módulos activos no permitidos: {forbidden}")
+        if forbidden and not active_allowlist:
+            raise ContactNotAllowedError(
+                f"Módulos activos sin lista blanca (RECONMAP_ACTIVE_ALLOWLIST): {forbidden}"
+            )
+        self.active_allowlist = active_allowlist
         self.store = store
         self.modules = modules
         self.keys = dict(keys or {})
         self.max_hosts = max_hosts
         self.limiter = RateLimiter()
 
-    def create_scan(self, target: str, depth: int = 1, allow_light: bool = False) -> str:
-        scan = self.store.create_scan(target, depth, allow_light)
+    def create_scan(
+        self, target: str, depth: int = 1, allow_light: bool = False, allow_active: bool = False
+    ) -> str:
+        if allow_active and not in_allowlist(target, self.active_allowlist):
+            raise ContactNotAllowedError(f"{target} no está en la lista blanca del modo Activo")
+        scan = self.store.create_scan(target, depth, allow_light, allow_active)
         self.store.start_module_runs(scan.id, [(m.name, m.label) for m in self.modules])
         return scan.id
 
     def skip_reason(self, module: Module, scan: Scan) -> str | None:
         if module.contact is Contact.LIGHT and not scan.allow_light:
             return "Requiere autorización de contacto ligero"
+        if module.contact is Contact.ACTIVE and not (
+            scan.allow_active and in_allowlist(scan.target, self.active_allowlist)
+        ):
+            return "Requiere modo Activo y dominio en la lista blanca"
         if module.requires_key and module.requires_key not in self.keys:
             return f"Falta {module.requires_key}"
         return None

@@ -52,10 +52,10 @@
       <p class="mode-modules">{% if light %}{{ light|length }} fuentes: {{ light|map(attribute="label")|join(", ") }}.{% endif %}</p>
     </article>
     <article class="mode mode-active">
-      <span class="mode-badge">No disponible</span>
+      <span class="mode-badge">{{ "Solo lista blanca" if active_allowlist else "Desactivado" }}</span>
       <h3>Activo</h3>
-      <p class="mode-claim">Fuera de alcance.</p>
-      <p>Escaneo de puertos, fuerza bruta de rutas o subdominios. reconmap observa y marca; no ataca.</p>
+      <p class="mode-claim">Solo dominios propios o con autorización por escrito.</p>
+      <p>Lanza httpx, tlsx y gowitness (Docker) contra los dominios de <code>RECONMAP_ACTIVE_ALLOWLIST</code>: qué webs responden, tecnologías leídas del HTML, certificado real y capturas. Nunca escáneres de vulnerabilidades, fuerza bruta ni fuzzing.</p>
     </article>
   </div>
 </section>

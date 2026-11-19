@@ -41,6 +41,12 @@
               <input type="radio" name="authorized" value="1">
               <span>Ligero</span>
             </label>
+            {% if project.target in active_targets %}
+            <label class="seg seg-active" title="En la lista blanca: tengo autorización por escrito o es mío">
+              <input type="radio" name="authorized" value="2">
+              <span>Activo</span>
+            </label>
+            {% endif %}
           </fieldset>
           <label class="depth">
             Profundidad
@@ -67,7 +73,7 @@
                     <span class="status-icon {{ item.scan.status }}">{{ status_icons[item.scan.status] }}</span>
                     {{ status_labels[item.scan.status] }}
                   </td>
-                  <td><span class="pill pill-{{ 'light' if item.scan.allow_light else 'passive' }}">{{ "ligero" if item.scan.allow_light else "pasivo" }}</span></td>
+                  <td><span class="pill pill-{{ item.scan.mode }}">{{ item.scan.mode }}</span></td>
                   <td>{{ item.scan.depth }}</td>
                   <td>{{ item.subdomains }}</td>
                   <td>{{ item.ips }}</td>

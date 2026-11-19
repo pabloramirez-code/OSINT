@@ -168,11 +168,10 @@ def _mapping(label: str, old: dict[str, str], new: dict[str, str]) -> Change:
 
 def _caveats(previous: Scan, current: Scan) -> list[str]:
     notes = []
-    if previous.allow_light != current.allow_light:
-        modes = {True: "Ligero", False: "Pasivo"}
+    if previous.mode != current.mode:
         notes.append(
-            f"Modo distinto ({modes[previous.allow_light]} → {modes[current.allow_light]}): "
-            "cabeceras, tecnologías vistas en cabeceras y WAF por cabeceras no son comparables."
+            f"Modo distinto ({previous.mode.capitalize()} → {current.mode.capitalize()}): "
+            "lo que aportan las cabeceras y las herramientas activas no es comparable."
         )
     if previous.depth != current.depth:
         notes.append(

@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader
 from starlette.exceptions import HTTPException
 
-from reconmap.config import KNOWN_KEYS, Settings, api_keys, load_env_file
+from reconmap.config import KNOWN_KEYS, Settings, api_keys, in_allowlist, load_env_file
 from reconmap.engine import Engine
 from reconmap.insights import ScanIndex
 from reconmap.models import Scan
@@ -46,8 +46,10 @@ def create_app(
     store: Store | None = None,
     modules: list[Module] | None = None,
     keys: Mapping[str, str] | None = None,
+    active_allowlist: tuple[str, ...] | None = None,
 ) -> FastAPI:
     settings = Settings()
+    allowlist = settings.active_allowlist if active_allowlist is None else active_allowlist
     keys = api_keys() if keys is None else keys
     store = store or Store(settings.db_path)
     store.fail_interrupted_scans()
@@ -56,6 +58,7 @@ def create_app(
         default_modules(settings) if modules is None else modules,
         keys=keys,
         max_hosts=settings.max_hosts,
+        active_allowlist=allowlist,
     )
     running: set[asyncio.Task[None]] = set()
 
@@ -71,6 +74,7 @@ def create_app(
         active = store.active_scan()
         page: dict[str, object] = {
             "active_scan": active,
+            "active_allowlist": allowlist,
             "busy": active is not None,
             "project_count": store.count_targets(),
         }
@@ -97,7 +101,7 @@ def create_app(
         return render(request, "error.html", context, exc.status_code)
 
     def module_cards() -> list[dict[str, object]]:
-        any_scan = Scan(id="-", target="-", allow_light=True)
+        any_scan = Scan(id="-", target="-", allow_light=True, allow_active=True)
         return [
             {
                 "label": m.label,
@@ -121,7 +125,11 @@ def create_app(
 
     @app.get("/projects", response_class=HTMLResponse)
     async def projects_page(request: Request) -> HTMLResponse:
-        return render(request, "projects.html", {"projects": views.projects(store)})
+        projects = views.projects(store)
+        active_targets = {p.target for p in projects if in_allowlist(p.target, allowlist)}
+        return render(
+            request, "projects.html", {"projects": projects, "active_targets": active_targets}
+        )
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -143,7 +151,18 @@ def create_app(
         if store.active_scan() is not None:
             return form_error(request, 429, "Ya hay un escaneo en marcha; espera a que termine")
 
-        scan_id = engine.create_scan(target, depth=int(depth), allow_light=authorized == "1")
+        active = authorized == "2"
+        if active and not in_allowlist(target, allowlist):
+            return form_error(
+                request,
+                422,
+                "Ese dominio no está en la lista blanca del modo Activo "
+                "(RECONMAP_ACTIVE_ALLOWLIST)",
+                target,
+            )
+        scan_id = engine.create_scan(
+            target, depth=int(depth), allow_light=authorized in {"1", "2"}, allow_active=active
+        )
         task = asyncio.create_task(engine.run(scan_id))
         running.add(task)
         task.add_done_callback(running.discard)

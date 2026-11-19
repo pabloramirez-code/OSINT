@@ -29,6 +29,14 @@ class Settings:
     max_light_hosts: int = field(default_factory=lambda: _env_int("RECONMAP_MAX_LIGHT_HOSTS", 50))
     wayback_limit: int = field(default_factory=lambda: _env_int("RECONMAP_WAYBACK_LIMIT", 1000))
     max_cve_lookups: int = field(default_factory=lambda: _env_int("RECONMAP_MAX_CVE_LOOKUPS", 20))
+    # Modo Activo (regla 1): solo estos dominios y sus subdominios. Vacío = modo desactivado.
+    active_allowlist: tuple[str, ...] = field(
+        default_factory=lambda: tuple(
+            name.strip().lower().rstrip(".")
+            for name in os.environ.get("RECONMAP_ACTIVE_ALLOWLIST", "").split(",")
+            if name.strip()
+        )
+    )
     dns_servers: tuple[str, ...] = field(
         default_factory=lambda: tuple(
             server.strip()
@@ -52,3 +60,8 @@ def load_env_file(path: Path = Path(".env")) -> None:
 
 def api_keys() -> dict[str, str]:
     return {name: os.environ[name] for name in KNOWN_KEYS if os.environ.get(name)}
+
+
+def in_allowlist(target: str, allowlist: tuple[str, ...]) -> bool:
+    """El dominio está en la lista blanca o es subdominio de uno que lo está."""
+    return any(target == name or target.endswith("." + name) for name in allowlist)

@@ -43,8 +43,17 @@ vectores de ataque. **Observa y marca.**
      (`RECONMAP_MAX_LIGHT_HOSTS`). **Desactivado por defecto.** Se activa en
      cada escaneo eligiendo el modo «Ligero» ("Tengo autorización o es un
      dominio mío"), que queda guardado en el `Scan`.
-   - `active`: cualquier otra cosa (puertos, rutas, fuzzing). Prohibido hasta
-     la Fase 5.
+   - `active` (**aprobado por el usuario el 2026-11-19**,
+     `docs/propuesta-modo-activo.md`): herramientas externas (httpx, tlsx,
+     gowitness, en Docker) que contactan con el objetivo más allá de una visita
+     a la portada. **Solo** contra dominios de la lista blanca
+     `RECONMAP_ACTIVE_ALLOWLIST` (en `.env`) y sus subdominios, y solo si en esa
+     ejecución se elige el modo «Activo» ("Tengo autorización por escrito o es
+     un dominio mío"), que queda guardado en el `Scan` (`allow_active`, que
+     implica `allow_light`). Sin lista blanca el modo no aparece y el motor
+     rechaza los módulos activos. Prohibidos los escáneres de
+     vulnerabilidades, la fuerza bruta y el fuzzing. Los procesos se lanzan
+     sin shell (lista de argumentos) y con los hosts ya validados.
 2. **Solo infraestructura, nunca personas.** No se recogen, guardan ni
    correlacionan datos personales. Si una fuente devuelve emails, se guarda solo
    el recuento por dominio. De los índices de filtraciones o buckets **nunca**
@@ -652,7 +661,8 @@ Sin `uv` en el PATH (Windows, PowerShell, desde la raíz del proyecto):
 
 ## 8. Fuera de alcance
 
-- Escaneo activo de dominios ajenos.
+- Escaneo activo de dominios ajenos (la lista blanca del modo Activo lo
+  impide: solo dominios propios o con autorización por escrito).
 - Fuerza bruta de subdominios o directorios.
 - Cualquier dato de personas (OSINT de personas, redes sociales, doxing).
 - "Análisis automático de vectores de ataque" o puntuaciones inventadas.
@@ -746,9 +756,14 @@ Sin `uv` en el PATH (Windows, PowerShell, desde la raíz del proyecto):
   agrupadas por producto, cada versión con dónde corre (IP · hosts que apuntan
   a ella), fuente (InternetDB o cabeceras) y CVEs; marca productos con varias
   versiones a la vez y lista aparte los detectados sin versión.
-- **Modo Activo**: propuesta en `docs/propuesta-modo-activo.md` (httpx, tlsx,
-  gowitness; lista blanca + confirmación). **Pendiente de aprobación**: cambia la
-  regla 1 y la sección 8. No escribir código hasta que el usuario la apruebe.
+- **Modo Activo** (aprobado el 2026-11-19; Docker elegido por el usuario).
+  Lista blanca: en `.env` (no se versiona).
+  - Paso 1 hecho: `allow_active` en `Scan` (migración), `RECONMAP_ACTIVE_ALLOWLIST`
+    + `in_allowlist`, motor (acepta módulos activos solo con lista blanca; los
+    salta si el escaneo no es Activo o el dominio no está), opción «Activo» en
+    la portada y en Proyectos solo para dominios de la lista, 422 fuera de ella.
+  - Siguiente: tlsx, httpx y gowitness. Antes, guardar salidas reales como
+    fixtures (Docker Desktop no estaba arrancado el 2026-11-19).
 - Notas:
   - `normalize_domain` devuelve `Domain(name, wildcard)` (NamedTuple).
   - IDNA con el códec estándar de Python (IDNA 2003), sin dependencia extra.

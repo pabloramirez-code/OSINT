@@ -180,8 +180,9 @@ button[type="submit"], .button {
   white-space: nowrap;
 }
 .pill { padding: 1px 9px; }
-.pill-passive { background: var(--passive-soft); color: var(--passive); }
-.pill-light { background: var(--light-soft); color: var(--light); }
+.pill-passive, .pill-pasivo { background: var(--passive-soft); color: var(--passive); }
+.pill-light, .pill-ligero { background: var(--light-soft); color: var(--light); }
+.pill-activo { background: var(--danger-soft); color: var(--danger); }
 .pill-neutral { background: var(--surface-2); color: var(--muted); }
 
 .badge { padding: 2px 9px; }
@@ -241,6 +242,7 @@ details summary { cursor: pointer; color: var(--accent); }
 .seg input:focus-visible + span { outline: 2px solid var(--accent); }
 .seg-passive input:checked + span { background: var(--surface); color: var(--passive); box-shadow: var(--shadow); }
 .seg-light input:checked + span { background: var(--surface); color: var(--light); box-shadow: var(--shadow); }
+.seg-active input:checked + span { background: var(--surface); color: var(--danger); box-shadow: var(--shadow); }
 .segmented:disabled { opacity: .55; }
 
 /* Progreso */

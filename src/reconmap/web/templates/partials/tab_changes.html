@@ -11,7 +11,7 @@
       <select name="against">
         {% for option in options %}
           <option value="{{ option.id }}"{{ " selected" if option.id == previous.id }}>
-            {{ option.created_at.strftime("%d/%m/%Y %H:%M") }} · {{ "ligero" if option.allow_light else "pasivo" }} · profundidad {{ option.depth }}
+            {{ option.created_at.strftime("%d/%m/%Y %H:%M") }} · {{ option.mode }} · profundidad {{ option.depth }}
           </option>
         {% endfor %}
       </select>

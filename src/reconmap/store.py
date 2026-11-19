@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS scans (
     target TEXT NOT NULL,
     depth INTEGER NOT NULL,
     allow_light INTEGER NOT NULL,
+    allow_active INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL,
     host_limit_reached INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
@@ -81,7 +82,10 @@ CREATE TABLE IF NOT EXISTS findings (
 """
 
 MIGRATIONS = {
-    "scans": {"host_limit_reached": "INTEGER NOT NULL DEFAULT 0"},
+    "scans": {
+        "host_limit_reached": "INTEGER NOT NULL DEFAULT 0",
+        "allow_active": "INTEGER NOT NULL DEFAULT 0",
+    },
     "module_runs": {"errors": "INTEGER NOT NULL DEFAULT 0"},
 }
 
@@ -139,16 +143,29 @@ class Store:
 
     # Escaneos
 
-    def create_scan(self, target: str, depth: int = 1, allow_light: bool = False) -> Scan:
-        scan = Scan(id=uuid.uuid4().hex[:12], target=target, depth=depth, allow_light=allow_light)
+    def create_scan(
+        self,
+        target: str,
+        depth: int = 1,
+        allow_light: bool = False,
+        allow_active: bool = False,
+    ) -> Scan:
+        scan = Scan(
+            id=uuid.uuid4().hex[:12],
+            target=target,
+            depth=depth,
+            allow_light=allow_light or allow_active,
+            allow_active=allow_active,
+        )
         self._query(
-            "INSERT INTO scans (id, target, depth, allow_light, status, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO scans (id, target, depth, allow_light, allow_active, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 scan.id,
                 scan.target,
                 scan.depth,
                 int(scan.allow_light),
+                int(scan.allow_active),
                 scan.status,
                 _iso(scan.created_at),
             ),
@@ -226,6 +243,7 @@ class Store:
             target=row["target"],
             depth=row["depth"],
             allow_light=bool(row["allow_light"]),
+            allow_active=bool(row["allow_active"]),
             status=ScanStatus(row["status"]),
             host_limit_reached=bool(row["host_limit_reached"]),
             created_at=datetime.fromisoformat(row["created_at"]),
