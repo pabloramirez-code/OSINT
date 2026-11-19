@@ -1,6 +1,6 @@
 # Propuesta: detección de posible WAF y descargas JSON en tres niveles
 
-Estado: **aprobada** (2026-11-19). Paso 1 (informes en tres niveles) implementado.
+Estado: **aprobada** (2026-11-19). Pasos 1 y 2 implementados.
 Creada: 2026-11-19. Revisada el mismo día con las indicaciones del usuario
 (textos de WAF, proveedor de la IP, Censys aplazado, tres niveles de JSON).
 
@@ -196,8 +196,10 @@ Añadir a la sección 7 de `CLAUDE.md`:
 
 1. ~~Informes en tres niveles + nota en `CLAUDE.md`.~~ Hecho. Medido con
    el dominio de prueba (servidor): resumen 4,9 KB, comprimido 44 KB, extendido 1,3 MB.
-2. `edge_assessment.py` con señales ya disponibles + textos "Posible WAF" /
-   "No se ha podido comprobar si existe WAF" + proveedor de la IP.
+2. ~~`edge_assessment.py` con señales ya disponibles + textos "Posible WAF" /
+   "No se ha podido comprobar si existe WAF" + proveedor de la IP.~~ Hecho. Cambios frente a lo
+   propuesto: el NS no decide (solo se anota), las IPs privadas se tratan
+   aparte y "fuera del proxy" es informativo, no `low`.
 3. Listas oficiales de rangos (`edge_ranges.py`).
 4. Cabeceras de proveedor en `headers` (modo Ligero).
 5. Censys/Netlas (aplazado).

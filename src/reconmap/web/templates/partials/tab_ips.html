@@ -12,6 +12,7 @@
           <th data-sort>Hosts</th>
           <th data-sort>ASN</th>
           <th data-sort>Organización</th>
+          <th data-sort>Proveedor</th>
           <th data-sort class="col-wide">Puertos</th>
           <th data-sort>CVEs</th>
         </tr>
@@ -30,6 +31,12 @@
             </td>
             <td class="nowrap">{{ row.asns|join(", ") or "—" }}</td>
             <td>{{ row.orgs|join(", ") or "—" }}</td>
+            <td>
+              <div class="cell-list">
+                <span>{{ row.provider }}</span>
+                {% if row.proxy %}<span class="tag tag-ok">Posible WAF</span>{% endif %}
+              </div>
+            </td>
             <td>
               {% if row.ports %}<div class="chips">{% for port in row.ports %}<span class="tag">{{ port }}</span>{% endfor %}</div>{% else %}—{% endif %}
             </td>

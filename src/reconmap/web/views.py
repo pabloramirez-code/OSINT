@@ -4,7 +4,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from reconmap.checks import SEVERITY_ORDER, Status
+from reconmap.edge_assessment import ip_provider
 from reconmap.headers_assessment import assess_host
+from reconmap.insights import ScanIndex, edge_overview, node_id
 from reconmap.mail_assessment import RISK_CRITERIA, MailAssessment, assess
 from reconmap.models import EntityType, RelationType, Scan
 from reconmap.store import Store
@@ -58,6 +60,8 @@ class IpRow:
     ports: list[int]
     vulns: list[str]
     tags: list[str]
+    provider: str = "desconocido"
+    proxy: bool = False
 
 
 def summary(store: Store, scan: Scan, max_hosts: int) -> dict[str, object]:
@@ -83,6 +87,7 @@ def summary(store: Store, scan: Scan, max_hosts: int) -> dict[str, object]:
         "max_hosts": max_hosts,
         "requests": [(run.label, run.requests) for run in scan.progress if run.requests],
         "mail_risk": _assessment(root).risk if isinstance(root.get("mail"), dict) else None,
+        "edge": edge_overview(ScanIndex(store, scan.id)),
     }
 
 
@@ -91,8 +96,16 @@ def subdomains(store: Store, scan: Scan) -> dict[str, object]:
     for relation in store.relations(scan.id):
         if relation.type is RelationType.RESOLVES_TO:
             ips[relation.from_ref.value].append(relation.to_ref.value)
+    index = ScanIndex(store, scan.id)
+    subs = store.entities(scan.id, EntityType.SUBDOMAIN)
     return {
-        "subdomains": store.entities(scan.id, EntityType.SUBDOMAIN),
+        "subdomains": subs,
+        "edges": {
+            sub.value: edge
+            for sub in subs
+            if (edge := index.edge(node_id(sub.type, sub.value))) is not None
+        },
+        "outside": {sub.value for sub in subs if index.outside_proxy(node_id(sub.type, sub.value))},
         "ips": {host: sorted(set(values)) for host, values in ips.items()},
         "first_seen": store.first_seen_anywhere(scan.id, EntityType.SUBDOMAIN),
     }
@@ -114,10 +127,12 @@ def ips(store: Store, scan: Scan) -> dict[str, object]:
         elif relation.type is RelationType.EXPOSES_PORT:
             ports[source].add(int(target.rsplit(":", 1)[1]))
 
+    index = ScanIndex(store, scan.id)
     rows = []
     for entity in store.entities(scan.id, EntityType.IP):
         ip = entity.value
         ip_asns = sorted(asns[ip])
+        provider = ip_provider(index.ip_info(entity))
         rows.append(
             IpRow(
                 ip=ip,
@@ -127,6 +142,8 @@ def ips(store: Store, scan: Scan) -> dict[str, object]:
                 ports=sorted(ports[ip]),
                 vulns=_strings(entity.attributes.get("vulns")),
                 tags=_strings(entity.attributes.get("tags")),
+                provider=provider.name if provider else "desconocido",
+                proxy=bool(provider and provider.proxy),
             )
         )
     return {"rows": rows}

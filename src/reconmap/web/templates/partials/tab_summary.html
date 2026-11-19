@@ -15,6 +15,12 @@
       <span class="card-label">Riesgo de suplantación por correo</span>
     </div>
   {% endif %}
+  {% if edge.hosts %}
+    <div class="card-stat">
+      <span class="card-value">{{ edge.possible_total }} / {{ edge.hosts }}</span>
+      <span class="card-label">Hosts con posible WAF</span>
+    </div>
+  {% endif %}
   {% for label, count in counts.items() %}
     <div class="card-stat"><span class="card-value">{{ count }}</span><span class="card-label">{{ label }}</span></div>
   {% endfor %}
@@ -49,6 +55,21 @@
     {% endif %}
   </section>
 </div>
+
+{% if edge.hosts %}
+  <section class="panel">
+    <h3>WAF y proveedores de IP</h3>
+    <dl>
+      {% if edge.root_label %}<dt>Dominio principal</dt><dd>{{ edge.root_label }}</dd>{% endif %}
+      {% for provider, count in edge.possible %}<dt>Posible WAF · {{ provider }}</dt><dd>{{ count }} host(s)</dd>{% endfor %}
+      <dt>No se ha podido comprobar si existe WAF</dt><dd>{{ edge.unknown }} host(s)</dd>
+      {% if edge.private %}<dt>Solo IPs privadas</dt><dd>{{ edge.private }} host(s)</dd>{% endif %}
+      <dt>Proveedores de IP</dt><dd>{% for provider, count in edge.providers %}{{ provider }} ({{ count }}){% if not loop.last %}, {% endif %}{% else %}—{% endfor %}</dd>
+      {% if edge.outside %}<dt>Posible origen fuera del proxy</dt><dd>{{ edge.outside|length }} host(s): verificar a mano (lista en Subdominios)</dd>{% endif %}
+    </dl>
+    <p class="muted">De forma pasiva no se puede saber si un WAF está activo: solo si el tráfico pasa por un proveedor que lo ofrece. Señales: ASN de la IP, etiqueta cdn de InternetDB, CNAME y, en modo Ligero, la cabecera <code>server</code> y los nombres de cookie.</p>
+  </section>
+{% endif %}
 
 {% if requests %}
   <section class="panel">

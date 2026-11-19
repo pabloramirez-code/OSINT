@@ -674,11 +674,20 @@ Sin `uv` en el PATH (Windows, PowerShell, desde la raíz del proyecto):
   - Fixture real del Wayback (el Archive estaba caído); los tests usan el
     formato CDX documentado.
 - En curso (2026-11-19, aprobado por el usuario): propuesta
-  `docs/propuesta-waf-y-lectura-eficiente.md`. Paso 1 hecho: informe JSON en
-  tres niveles (`?level=extended|compact|summary`, botones en la pestaña JSON,
-  `reconmap report`). Siguiente: paso 2, `edge_assessment.py` con los textos
-  "Posible WAF · <proveedor>" / "No se ha podido comprobar si existe WAF" y el
-  proveedor de la IP. Censys aplazado por el usuario.
+  `docs/propuesta-waf-y-lectura-eficiente.md`.
+  - Paso 1 hecho: informe JSON en tres niveles (`?level=extended|compact|summary`,
+    botones en la pestaña JSON, `reconmap report`).
+  - Paso 2 hecho: `edge_assessment.py` (puro). Solo dos estados: "Posible WAF ·
+    <proveedor>" o "No se ha podido comprobar si existe WAF", más el proveedor
+    de la IP (ASN → tablas; si no, organización). Señales: ASN, etiqueta `cdn`
+    (AWS + `cdn` = CloudFront), CNAME, cabecera `server` y nombres de cookie
+    (modo Ligero). El NS de Cloudflare solo se anota, no decide. Las IPs
+    privadas se marcan aparte y nunca cuentan como "fuera del proxy".
+    "Posible origen fuera del proxy" es INFO (no WARN): el dominio de prueba tiene 39
+    hosts así y como aviso sería ruido. Columna WAF en Subdominios, Proveedor
+    en IPs, tarjeta y panel en Resumen, bloque `waf` en los informes.
+  - Siguiente: paso 3, listas oficiales de rangos (`edge_ranges.py`). Censys
+    aplazado por el usuario.
 - Notas:
   - `normalize_domain` devuelve `Domain(name, wildcard)` (NamedTuple).
   - IDNA con el códec estándar de Python (IDNA 2003), sin dependencia extra.

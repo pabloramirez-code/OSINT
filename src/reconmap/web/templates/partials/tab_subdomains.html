@@ -10,6 +10,7 @@
         <tr>
           <th data-sort>Subdominio</th>
           <th data-sort>IPs</th>
+          <th data-sort>WAF</th>
           <th data-sort>Fuentes</th>
           <th data-sort>Visto por primera vez</th>
         </tr>
@@ -19,6 +20,16 @@
           <tr>
             <td><code>{{ sub.value }}</code>{% if sub.attributes.wildcard %} <span class="tag">comodín</span>{% endif %}</td>
             <td>{{ ips.get(sub.value, [])|join(", ") or "—" }}</td>
+            <td>
+              {% set edge = edges.get(sub.value) %}
+              {% if edge %}
+                <div class="cell-list">
+                  <span class="tag {{ 'tag-ok' if edge.status == 'posible' else '' }}" title="{{ edge.evidence|join('; ') }}">{{ edge.label }}</span>
+                  <span class="muted">{{ edge.ip_label }}{% if edge.confidence %} · confianza {{ edge.confidence }}{% endif %}</span>
+                  {% if sub.value in outside %}<span class="tag tag-warning" title="El dominio principal pasa por un proxy con WAF y este host no">Posible origen fuera del proxy</span>{% endif %}
+                </div>
+              {% else %}—{% endif %}
+            </td>
             <td>{{ sub.sources|sort|join(", ") }}</td>
             <td>{{ first_seen.get(sub.value, sub.first_seen).strftime("%Y-%m-%d") }}</td>
           </tr>
@@ -26,6 +37,7 @@
       </tbody>
     </table>
   </div>
+  <p class="muted">WAF: de forma pasiva solo se puede ver si el tráfico pasa por un proveedor que ofrece WAF (Cloudflare, Akamai, Imperva…), no si está activo. Pasa el ratón por la etiqueta para ver las señales.</p>
 {% else %}
   <p class="muted">No se han encontrado subdominios.</p>
 {% endif %}

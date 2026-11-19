@@ -5,11 +5,19 @@ observa y marca, no confirma vulnerabilidades. Base de las reglas de la Fase 4.
 """
 
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from reconmap.checks import SEVERITY_ORDER, Check, Status
+from reconmap.edge_assessment import (
+    PRIVATE,
+    EdgeAssessment,
+    IpInfo,
+    WafStatus,
+    assess_edge,
+    ip_provider,
+)
 from reconmap.headers_assessment import assess_host
 from reconmap.mail_assessment import Risk, assess
 from reconmap.models import Entity, EntityType, Relation, RelationType, utcnow
@@ -102,6 +110,7 @@ class ScanIndex:
 
     def __init__(self, store: Store, scan_id: str, now: datetime | None = None) -> None:
         self.now = now or utcnow()
+        self._edges: dict[str, EdgeAssessment | None] = {}
         self.entities = {node_id(e.type, e.value): e for e in store.entities(scan_id)}
         self.outgoing: dict[str, list[Relation]] = defaultdict(list)
         self.incoming: dict[str, list[Relation]] = defaultdict(list)
@@ -145,6 +154,60 @@ class ScanIndex:
             related=self._related(nid),
         )
 
+    # WAF y proveedor de la IP
+
+    def ip_info(self, ip: Entity) -> IpInfo:
+        nid = node_id(ip.type, ip.value)
+        asns = self.neighbours(nid, RelationType.BELONGS_TO_ASN)
+        orgs = [
+            o.value
+            for a in asns
+            for o in self.neighbours(node_id(a.type, a.value), RelationType.OWNED_BY)
+        ]
+        holders = [str(a.attributes["holder"]) for a in asns if a.attributes.get("holder")]
+        return IpInfo(
+            ip=ip.value,
+            asns=[a.value for a in asns],
+            orgs=orgs or holders,
+            tags=_strings(ip.attributes.get("tags")),
+        )
+
+    def edge(self, nid: str) -> EdgeAssessment | None:
+        """Posible WAF de un host (None si no resuelve o no es un host)."""
+        if nid in self._edges:
+            return self._edges[nid]
+        host = self.entities.get(nid)
+        result = None
+        if host is not None and host.type in {EntityType.DOMAIN, EntityType.SUBDOMAIN}:
+            raw_dns = host.attributes.get("dns")
+            dns_records = raw_dns if isinstance(raw_dns, dict) else {}
+            result = assess_edge(
+                [self.ip_info(ip) for ip in self.neighbours(nid, RelationType.RESOLVES_TO)],
+                cname=_strings(dns_records.get("CNAME")),
+                ns=_strings(dns_records.get("NS")),
+                http_headers=host.attributes.get("http_headers"),
+            )
+        self._edges[nid] = result
+        return result
+
+    def root_edge_provider(self) -> str | None:
+        roots = [n for n, e in self.entities.items() if e.type is EntityType.DOMAIN]
+        edge = self.edge(roots[0]) if roots else None
+        return edge.waf_provider if edge and edge.status is WafStatus.POSSIBLE else None
+
+    def outside_proxy(self, nid: str) -> bool:
+        """El dominio raíz pasa por un proxy con WAF y este host (otro) no."""
+        entity = self.entities.get(nid)
+        if entity is None or entity.type is not EntityType.SUBDOMAIN:
+            return False
+        edge = self.edge(nid)
+        return (
+            edge is not None
+            and edge.status is WafStatus.UNKNOWN
+            and PRIVATE not in edge.ip_providers
+            and self.root_edge_provider() is not None
+        )
+
     # Por tipo
 
     def _ip(self, nid: str, ip: Entity) -> tuple[list[Check], list[tuple[str, str]]]:
@@ -163,7 +226,17 @@ class ScanIndex:
             )
             for cve in vulns
         ]
-        if "cdn" in tags:
+        provider = ip_provider(self.ip_info(ip))
+        if provider and provider.proxy:
+            problems.append(
+                Check(
+                    "Proveedor",
+                    Status.INFO,
+                    f"IP de {provider.name}, proveedor con WAF: los puertos son del proxy, "
+                    "no necesariamente del servidor real",
+                )
+            )
+        elif "cdn" in tags:
             problems.append(
                 Check(
                     "CDN",
@@ -184,6 +257,7 @@ class ScanIndex:
         info = [
             ("Red (ASN)", ", ".join(a.value for a in asns) or "—"),
             ("Organización", ", ".join(o.value for o in orgs) or "—"),
+            ("Proveedor de la IP", provider.name if provider else "desconocido"),
             ("Prefijo", str(ip.attributes.get("prefix") or "—")),
             ("Hosts que apuntan aquí", ", ".join(h.value for h in hosts) or "—"),
             ("Puertos abiertos", ", ".join(map(str, ports)) or "ninguno conocido"),
@@ -240,10 +314,28 @@ class ScanIndex:
             problems.append(
                 Check("Host", Status.OK, "Sin problemas detectados con los datos disponibles")
             )
+        edge = self.edge(nid)
+        if edge is not None:
+            problems.append(Check("WAF", Status.INFO, edge.label, "; ".join(edge.evidence)))
+            if self.outside_proxy(nid):
+                problems.append(
+                    Check(
+                        "Fuera del proxy",
+                        Status.INFO,
+                        "Posible origen o servicio fuera del proxy, verificar a mano",
+                        f"El dominio principal pasa por {self.root_edge_provider()}, "
+                        "pero este host resuelve a IPs que no son de ese proveedor.",
+                    )
+                )
 
         raw_dns = attrs.get("dns")
         dns_records = raw_dns if isinstance(raw_dns, dict) else {}
         info = [("IPs", ", ".join(i.value for i in ips) or "—")]
+        if edge is not None:
+            info.append(("Proveedor de la IP", ", ".join(edge.ip_providers) or "desconocido"))
+            info.append(("WAF", edge.label))
+            if edge.confidence:
+                info.append(("Confianza", edge.confidence.value))
         cname = _strings(dns_records.get("CNAME"))
         if cname:
             info.append(("Alias (CNAME)", ", ".join(cname)))
@@ -367,6 +459,57 @@ class ScanIndex:
             }
         ordered = sorted(related.values(), key=lambda r: (r["rank"], r["label"]))
         return [{k: v for k, v in r.items() if k != "rank"} for r in ordered[:MAX_RELATED]]
+
+
+@dataclass(frozen=True)
+class EdgeOverview:
+    """Recuento de posible WAF y proveedores de IP de los hosts que resuelven."""
+
+    possible: list[tuple[str, int]]
+    unknown: int
+    private: int
+    providers: list[tuple[str, int]]
+    outside: list[str]
+    root_label: str | None
+
+    @property
+    def possible_total(self) -> int:
+        return sum(n for _, n in self.possible)
+
+    @property
+    def hosts(self) -> int:
+        return self.possible_total + self.unknown + self.private
+
+
+def edge_overview(index: ScanIndex) -> EdgeOverview:
+    possible: Counter[str] = Counter()
+    providers: Counter[str] = Counter()
+    unknown = private = 0
+    root_label: str | None = None
+    outside: list[str] = []
+    for nid, entity in sorted(index.entities.items()):
+        edge = index.edge(nid)
+        if edge is None:
+            continue
+        if entity.type is EntityType.DOMAIN:
+            root_label = edge.label
+        providers.update(edge.ip_providers)
+        if edge.status is WafStatus.POSSIBLE:
+            possible[str(edge.waf_provider)] += 1
+        elif edge.private:
+            private += 1
+        else:
+            unknown += 1
+        if index.outside_proxy(nid):
+            outside.append(entity.value)
+    return EdgeOverview(
+        possible=possible.most_common(),
+        unknown=unknown,
+        private=private,
+        providers=[(name, n) for name, n in providers.most_common() if name != PRIVATE],
+        outside=outside,
+        root_label=root_label,
+    )
 
 
 def short_label(entity: Entity) -> str:

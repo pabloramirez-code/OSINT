@@ -15,7 +15,8 @@ from datetime import datetime
 from enum import StrEnum
 
 from reconmap.checks import Check, Status
-from reconmap.insights import SENSITIVE_PATHS, ScanIndex, node_id
+from reconmap.edge_assessment import ip_provider
+from reconmap.insights import SENSITIVE_PATHS, ScanIndex, edge_overview, node_id
 from reconmap.mail_assessment import assess
 from reconmap.models import Entity, EntityType, RelationType, Scan
 from reconmap.store import Store
@@ -94,12 +95,22 @@ class _ScanView:
             "mail": self._mail(with_checks=True),
             "asns": {a.value: _clean(self._org_of(a)) for a in self.by_type[EntityType.ASN]},
             "hosts": {
-                "columns": ["host", "ips", "cname", "asn", "ports", "problems"],
+                "columns": [
+                    "host",
+                    "ips",
+                    "ip_provider",
+                    "waf",
+                    "cname",
+                    "asn",
+                    "ports",
+                    "problems",
+                ],
                 "rows": [self._host_row(h) for h in self.hosts],
             },
+            "waf": self._waf(),
             "nxdomain": [h.value for h in self.nxdomain],
             "ips": {
-                "columns": ["ip", "asn", "ports", "cves", "tags", "hosts"],
+                "columns": ["ip", "asn", "provider", "ports", "cves", "tags", "hosts"],
                 "rows": [self._ip_row(ip) for ip in self.by_type[EntityType.IP]],
             },
             "certificates": self._certificates(),
@@ -118,6 +129,7 @@ class _ScanView:
             "counts": self._counts(),
             "mail_risk": mail,
             "domain_expires": self._domain().get("expires"),
+            "waf": self._waf(),
             "problems": {
                 "fail": len(groups[Status.FAIL]),
                 "warn": len(groups[Status.WARN]),
@@ -213,9 +225,15 @@ class _ScanView:
         cname = dns.get("CNAME") if isinstance(dns, dict) else None
         asns = sorted({a.value for ip in ips for a in self._asns_of(ip)})
         ports = sorted({p for ip in ips for p in self._ports_of(ip)})
+        edge = self.index.edge(node_id(host.type, host.value))
+        waf = ""
+        if edge is not None:
+            waf = edge.label + (f" ({edge.confidence.value})" if edge.confidence else "")
         return [
             host.value,
             ", ".join(ip.value for ip in ips),
+            edge.ip_label.removeprefix("IP de ") if edge else "",
+            waf,
             ", ".join(_clean(str(c)) for c in cname) if isinstance(cname, list) else "",
             ", ".join(asns),
             ", ".join(map(str, ports)),
@@ -225,14 +243,30 @@ class _ScanView:
     def _ip_row(self, ip: Entity) -> list[object]:
         nid = node_id(ip.type, ip.value)
         hosts = self.index.neighbours(nid, RelationType.RESOLVES_TO, incoming=True)
+        provider = ip_provider(self.index.ip_info(ip))
         return [
             ip.value,
             ", ".join(a.value for a in self._asns_of(ip)),
+            _clean(provider.name) if provider else "",
             ", ".join(map(str, self._ports_of(ip))),
             ", ".join(_strings(ip.attributes.get("vulns"))),
             ", ".join(_strings(ip.attributes.get("tags"))),
             ", ".join(h.value for h in hosts),
         ]
+
+    def _waf(self) -> dict[str, object]:
+        overview = edge_overview(self.index)
+        return {
+            "note": "Posible WAF = el tráfico pasa por un proveedor que lo ofrece; no se "
+            "comprueba si está activo",
+            "domain": overview.root_label,
+            "hosts_resolving": overview.hosts,
+            "possible": dict(overview.possible),
+            "not_checked": overview.unknown,
+            "private_only": overview.private,
+            "ip_providers": dict(overview.providers),
+            "outside_proxy": overview.outside,
+        }
 
     def _certificates(self) -> dict[str, object]:
         certificates = self.by_type[EntityType.CERTIFICATE]
