@@ -1,6 +1,8 @@
 # OSINT
 An automated Open-Source Intelligence (OSINT) system
 
+**Instalación y despliegue paso a paso:** [docs/manual-instalacion.md](docs/manual-instalacion.md)
+
 ## Desplegar con Docker
 
 ```bash
