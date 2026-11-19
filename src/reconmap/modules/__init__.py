@@ -4,6 +4,7 @@ from reconmap.modules.bgp import Bgp
 from reconmap.modules.certspotter import CertSpotter
 from reconmap.modules.crtsh import CrtSh
 from reconmap.modules.dns import Dns, make_resolver
+from reconmap.modules.edge_ranges import EdgeRanges
 from reconmap.modules.hackertarget import HackerTarget
 from reconmap.modules.headers import Headers
 from reconmap.modules.internetdb import InternetDb
@@ -28,4 +29,5 @@ def default_modules(settings: Settings | None = None) -> list[Module]:
         Wayback(limit=settings.wayback_limit),
         InternetDb(),
         Bgp(),
+        EdgeRanges(),
     ]

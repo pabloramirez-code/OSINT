@@ -165,11 +165,15 @@ class ScanIndex:
             for o in self.neighbours(node_id(a.type, a.value), RelationType.OWNED_BY)
         ]
         holders = [str(a.attributes["holder"]) for a in asns if a.attributes.get("holder")]
+        edge_range = ip.attributes.get("edge_range")
+        found = edge_range if isinstance(edge_range, dict) else {}
         return IpInfo(
             ip=ip.value,
             asns=[a.value for a in asns],
             orgs=orgs or holders,
             tags=_strings(ip.attributes.get("tags")),
+            range_provider=str(found["provider"]) if found.get("provider") else None,
+            range_prefix=str(found["prefix"]) if found.get("prefix") else None,
         )
 
     def edge(self, nid: str) -> EdgeAssessment | None:

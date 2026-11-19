@@ -6,7 +6,9 @@ un proveedor que lo ofrece (Cloudflare, Akamai, Imperva…). Por eso solo hay do
 afirma "con WAF" ni "sin WAF".
 
 Señales (de las fuentes que ya consulta reconmap, sin peticiones nuevas):
-- ASN y organización de cada IP (RIPEstat) y etiqueta `cdn` (Shodan InternetDB).
+- Listas oficiales de rangos IP (Cloudflare, Fastly, AWS CloudFront; módulo
+  `edge_ranges`), ASN y organización de cada IP (RIPEstat) y etiqueta `cdn`
+  (Shodan InternetDB).
 - CNAME hacia el proveedor (DNS).
 - Cabecera `server` y nombres de cookie (solo en modo Ligero, de `headers`).
 - NS del proveedor: solo se anota; tener el DNS en Cloudflare no implica que el
@@ -131,6 +133,8 @@ class IpInfo:
     asns: list[str] = field(default_factory=list)
     orgs: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    range_provider: str | None = None  # lista oficial de rangos (módulo edge_ranges)
+    range_prefix: str | None = None
 
 
 @dataclass(frozen=True)
@@ -185,6 +189,12 @@ def ip_provider(info: IpInfo) -> IpProvider | None:
     """Quién es el dueño de la IP y si es un proxy con WAF. None si no hay datos."""
     if not _is_global(info.ip):
         return IpProvider(PRIVATE, False, "dirección privada o reservada")
+    if info.range_provider:
+        return IpProvider(
+            info.range_provider,
+            True,
+            f"rango oficial de {info.range_provider} ({info.range_prefix})",
+        )
     for asn in info.asns:
         number = _asn_number(asn)
         if number in PROXY_ASNS:
@@ -217,26 +227,32 @@ def assess_edge(
     providers = [(info, ip_provider(info)) for info in ips]
     ip_names = sorted({p.name for _, p in providers if p})
 
-    evidence: list[str] = []
+    # Señal → IPs que la tienen (vacío si no es de una IP). Se agrupan para que un host
+    # con 16 IPs de CloudFront muestre una línea, no dieciséis.
+    found: dict[str, list[str]] = {}
     kinds: dict[str, set[str]] = {}  # proveedor → tipos de señal distintos
 
-    def add(provider: str, kind: str, text: str) -> None:
+    def note(text: str, ip: str | None = None) -> None:
+        ips_with_signal = found.setdefault(text, [])
+        if ip and ip not in ips_with_signal:
+            ips_with_signal.append(ip)
+
+    def add(provider: str, kind: str, text: str, ip: str | None = None) -> None:
         kinds.setdefault(provider, set()).add(kind)
-        if text not in evidence:
-            evidence.append(text)
+        note(text, ip)
 
     all_proxy = all(p is not None and p.proxy for _, p in providers)
     for info, provider in providers:
         if provider is None:
-            evidence.append(f"{info.ip}: sin datos de ASN ni organización")
+            note("sin datos de ASN ni organización", info.ip)
             continue
         if provider.proxy:
-            add(provider.name, "ip", f"IP {info.ip}: {provider.evidence}")
+            add(provider.name, "ip", provider.evidence, info.ip)
         if "cdn" in info.tags:
             if provider.name == AWS:
-                add(CLOUDFRONT, "cdn", f"IP {info.ip}: AWS con etiqueta cdn (CloudFront)")
+                add(CLOUDFRONT, "cdn", "AWS con etiqueta cdn (CloudFront)", info.ip)
             elif provider.proxy:
-                add(provider.name, "cdn", f"IP {info.ip}: etiqueta cdn de Shodan InternetDB")
+                add(provider.name, "cdn", "etiqueta cdn de Shodan InternetDB", info.ip)
     for name in cname or []:
         if provider_name := _by_suffix(name, CNAME_SUFFIXES):
             add(provider_name, "cname", f"CNAME {name.rstrip('.')}")
@@ -249,13 +265,12 @@ def assess_edge(
                 add(provider_name, "cookie", f"Cookie {cookie}")
     for name in ns or []:
         if provider_name := _by_suffix(name, NS_SUFFIXES):
-            note = (
+            note(
                 f"DNS gestionado por {provider_name} (no implica que el tráfico pase por su proxy)"
             )
-            if note not in evidence:
-                evidence.append(note)
 
     signals = {name: len(provider_kinds) for name, provider_kinds in kinds.items()}
+    evidence = [_evidence_line(text, ips_with_signal) for text, ips_with_signal in found.items()]
     strong = {
         name
         for name, provider_kinds in kinds.items()
@@ -271,6 +286,14 @@ def assess_edge(
         ip_names = sorted({CLOUDFRONT if n == AWS else n for n in ip_names})
     confidence = Confidence.HIGH if signals[best] >= 2 else Confidence.MEDIUM
     return EdgeAssessment(WafStatus.POSSIBLE, best, ip_names, confidence, evidence)
+
+
+def _evidence_line(text: str, ips: list[str]) -> str:
+    if not ips:
+        return text
+    if len(ips) == 1:
+        return f"IP {ips[0]}: {text}"
+    return f"{len(ips)} IPs ({ips[0]}, …): {text}"
 
 
 def org_name(holder: str) -> str:

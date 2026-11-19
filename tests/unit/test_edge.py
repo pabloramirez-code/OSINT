@@ -236,3 +236,10 @@ def test_provider_name_is_escaped(client: TestClient, store: Store) -> None:
     page = client.get(f"/scans/{scan_id}/tabs/ips").text
     assert "<img src=x" not in page
     assert "&lt;img src=x onerror=alert(1)&gt;" in page
+
+
+def test_signals_from_several_ips_are_grouped() -> None:
+    second = IpInfo("172.66.157.33", asns=["AS13335"], orgs=CLOUDFLARE_IP.orgs)
+    edge = assess_edge([CLOUDFLARE_IP, second])
+    assert edge is not None
+    assert edge.evidence == ["2 IPs (104.20.44.74, …): AS13335 (Cloudflare)"]

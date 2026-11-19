@@ -6,6 +6,7 @@ from reconmap.modules.bgp import Bgp
 from reconmap.modules.certspotter import CertSpotter
 from reconmap.modules.crtsh import CrtSh
 from reconmap.modules.dns import Dns
+from reconmap.modules.edge_ranges import EdgeRanges
 from reconmap.modules.hackertarget import HackerTarget
 from reconmap.modules.internetdb import InternetDb
 from reconmap.modules.rdap import Rdap
@@ -25,6 +26,7 @@ CASES: list[tuple[Module, Entity]] = [
     (Wayback(limit=20), DOMAIN),
     (InternetDb(), IP),
     (Bgp(), IP),
+    (EdgeRanges(), IP),  # 104.20.23.154 está en 104.16.0.0/13 (Cloudflare)
 ]
 
 

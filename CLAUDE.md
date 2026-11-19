@@ -686,8 +686,17 @@ Sin `uv` en el PATH (Windows, PowerShell, desde la raíz del proyecto):
     "Posible origen fuera del proxy" es INFO (no WARN): el dominio de prueba tiene 39
     hosts así y como aviso sería ruido. Columna WAF en Subdominios, Proveedor
     en IPs, tarjeta y panel en Resumen, bloque `waf` en los informes.
-  - Siguiente: paso 3, listas oficiales de rangos (`edge_ranges.py`). Censys
-    aplazado por el usuario.
+  - Paso 3 hecho: `modules/edge_ranges.py` (`passive`) con las listas oficiales
+    de Cloudflare (texto), Fastly (JSON) y AWS (solo servicio `CLOUDFRONT`, no
+    `CLOUDFRONT_ORIGIN_FACING`). Se descargan una vez (caché 24 h) y se guardan
+    procesadas en memoria; una lista caída no detiene a las demás (se reintenta
+    a los 10 min). Marca la IP con `edge_range: {provider, prefix}`, que tiene
+    prioridad sobre el ASN. Fixtures reales en `tests/fixtures/` (la de AWS,
+    recortada). En el dominio de prueba no cambia el resultado (las IPs de CloudFront ya
+    se detectaban por la etiqueta `cdn`), pero cubre IPv6, donde InternetDB no
+    llega. Las señales se agrupan por IP ("5 IPs (…): …").
+  - Siguiente: paso 4, cabeceras de proveedor en `headers` (modo Ligero).
+    Censys aplazado por el usuario.
 - Notas:
   - `normalize_domain` devuelve `Domain(name, wildcard)` (NamedTuple).
   - IDNA con el códec estándar de Python (IDNA 2003), sin dependencia extra.
