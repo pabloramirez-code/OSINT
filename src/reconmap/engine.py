@@ -152,7 +152,8 @@ class Engine:
         progress.total += 1
         self._save_progress(state, module.name, status=RunStatus.RUNNING)
         try:
-            result = await asyncio.wait_for(module.run(entity, ctx), MODULE_TIMEOUT_SECONDS)
+            timeout = getattr(module, "timeout", MODULE_TIMEOUT_SECONDS)
+            result = await asyncio.wait_for(module.run(entity, ctx), timeout)
         except Exception as exc:
             progress.errors += 1
             progress.error = str(exc) if isinstance(exc, ModuleError) else _unexpected(module, exc)
@@ -171,8 +172,8 @@ class Engine:
         en ámbito cuentan un salto más. Nada fuera de ámbito se reencola (regla 3)."""
         if entity.ref in state.visited:
             return
-        if entity.type is EntityType.IP:
-            next_depth = depth
+        if entity.type in {EntityType.IP, EntityType.TECHNOLOGY}:
+            next_depth = depth  # una tecnología no es un salto: se consulta su CVE y ya
         elif entity.type is EntityType.SUBDOMAIN and in_scope(entity.value, state.scan.target):
             next_depth = depth + 1
         else:

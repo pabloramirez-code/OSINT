@@ -18,6 +18,8 @@ const TYPES = {
   certificate: { name: "Certificado", color: "#94a3b8", shape: "tag", size: 18 },
   url: { name: "URL archivada", color: "#64748b", shape: "rectangle", size: 14 },
   candidate: { name: "Candidato", color: "#dc2626", shape: "vee", size: 18 },
+  technology: { name: "Tecnología", color: "#0891b2", shape: "barrel", size: 22 },
+  cve: { name: "CVE", color: "#b91c1c", shape: "octagon", size: 16 },
 };
 
 const STATUS_LABELS = { ok: "Correcto", warn: "Mejorable", fail: "Problema", info: "Info" };
@@ -76,7 +78,7 @@ function graphStyle() {
       },
     },
     ...byType,
-    { selector: 'node[type = "certificate"], node[type = "port"], node[type = "url"]', style: { "min-zoomed-font-size": 9 } },
+    { selector: 'node[type = "certificate"], node[type = "port"], node[type = "url"], node[type = "cve"]', style: { "min-zoomed-font-size": 9 } },
     { selector: "node[?group]", style: { "border-width": 2, "border-style": "dashed", "border-color": "#637083", width: 34, height: 34 } },
     { selector: 'node[worst = "warn"]', style: { "border-width": 3, "border-color": "#d97706" } },
     { selector: 'node[worst = "fail"]', style: { "border-width": 4, "border-color": "#c62828" } },

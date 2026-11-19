@@ -1,4 +1,4 @@
-from reconmap.config import Settings
+from reconmap.config import Settings, api_keys
 from reconmap.modules.base import Module
 from reconmap.modules.bgp import Bgp
 from reconmap.modules.certspotter import CertSpotter
@@ -10,6 +10,8 @@ from reconmap.modules.headers import Headers
 from reconmap.modules.internetdb import InternetDb
 from reconmap.modules.mail import Mail
 from reconmap.modules.mta_sts import MtaSts
+from reconmap.modules.nvd import KEY_NAME as NVD_KEY
+from reconmap.modules.nvd import Nvd
 from reconmap.modules.rdap import Rdap
 from reconmap.modules.wayback import Wayback
 
@@ -30,4 +32,5 @@ def default_modules(settings: Settings | None = None) -> list[Module]:
         InternetDb(),
         Bgp(),
         EdgeRanges(),
+        Nvd(has_key=NVD_KEY in api_keys(), max_lookups=settings.max_cve_lookups),
     ]

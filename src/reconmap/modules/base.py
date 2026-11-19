@@ -78,8 +78,12 @@ class Context:
         secret_params: Mapping[str, str] | None = None,
         secret_headers: Mapping[str, str] | None = None,
         allow_not_found: bool = False,
+        reduce: Callable[[object], object] | None = None,
     ) -> object:
-        """Devuelve el JSON de `url`, o None si es 404 y `allow_not_found`."""
+        """Devuelve el JSON de `url`, o None si es 404 y `allow_not_found`.
+
+        `reduce` se aplica antes de guardar en caché: para respuestas grandes (NVD) solo se
+        guarda lo que se va a usar."""
 
         async def fetch() -> object:
             response = await self._request(
@@ -91,7 +95,7 @@ class Context:
                 data: object = response.json()
             except ValueError as exc:
                 raise ModuleError("La respuesta no es JSON válido") from exc
-            return data
+            return reduce(data) if reduce else data
 
         return await self.cached(module, url, fetch)
 

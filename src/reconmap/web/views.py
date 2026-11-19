@@ -1,14 +1,15 @@
 """Datos que necesita cada pestaña. Las plantillas solo pintan; aquí se agrega."""
 
+import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 
 from reconmap.checks import SEVERITY_ORDER, Status
 from reconmap.edge_assessment import ip_provider
 from reconmap.headers_assessment import assess_host
-from reconmap.insights import ScanIndex, edge_overview, node_id
+from reconmap.insights import ScanIndex, edge_overview, node_id, short_label
 from reconmap.mail_assessment import RISK_CRITERIA, MailAssessment, assess
-from reconmap.models import EntityType, RelationType, Scan
+from reconmap.models import Entity, EntityType, RelationType, Scan
 from reconmap.store import Store
 
 
@@ -147,6 +148,110 @@ def ips(store: Store, scan: Scan) -> dict[str, object]:
             )
         )
     return {"rows": rows}
+
+
+CVE_ID = re.compile(r"^CVE-\d{4}-\d{4,}$")
+
+
+@dataclass(frozen=True)
+class CveRow:
+    id: str
+    cvss: float | None
+    severity: str
+    kev: bool
+    published: str
+    summary: str
+    link: bool  # solo se enlaza a NVD si el identificador tiene formato de CVE
+    affected: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class TechRow:
+    label: str
+    version: str | None
+    cpe: str | None
+    seen_on: list[str]
+    lookup: str
+    cves: list[CveRow]
+
+    @property
+    def max_cvss(self) -> float | None:
+        scores = [c.cvss for c in self.cves if c.cvss is not None]
+        return max(scores) if scores else None
+
+    @property
+    def kev(self) -> int:
+        return sum(c.kev for c in self.cves)
+
+
+def technologies(store: Store, scan: Scan) -> dict[str, object]:
+    """Tecnologías detectadas y CVEs reportadas para su versión (NVD) o su IP (InternetDB)."""
+    index = ScanIndex(store, scan.id)
+    rows = []
+    linked: set[str] = set()
+    for entity in store.entities(scan.id, EntityType.TECHNOLOGY):
+        nid = node_id(entity.type, entity.value)
+        cves = index.neighbours(nid, RelationType.HAS_VULNERABILITY)
+        linked.update(c.value for c in cves)
+        attrs = entity.attributes
+        version = attrs.get("version")
+        lookup = str(attrs.get("cve_lookup") or ("sin versión" if not version else "pendiente"))
+        rows.append(
+            TechRow(
+                label=short_label(entity),
+                version=str(version) if version else None,
+                cpe=str(attrs["cpe"]) if attrs.get("cpe") else None,
+                seen_on=[
+                    u.value
+                    for u in index.neighbours(nid, RelationType.USES_TECHNOLOGY, incoming=True)
+                ],
+                lookup=lookup,
+                cves=_cve_rows(index, cves),
+            )
+        )
+    rows.sort(key=lambda r: (-r.kev, -(r.max_cvss or 0), r.label))
+    by_ip = [
+        c
+        for c in store.entities(scan.id, EntityType.CVE)
+        if c.attributes.get("internetdb") and c.value not in linked
+    ]
+    return {
+        "rows": rows,
+        "ip_cves": _cve_rows(index, by_ip, with_affected=True),
+        "total_cves": len(store.entities(scan.id, EntityType.CVE)),
+    }
+
+
+def _cve_rows(index: ScanIndex, cves: list[Entity], with_affected: bool = False) -> list[CveRow]:
+    rows = []
+    for cve in cves:
+        raw = cve.attributes.get("nvd")
+        nvd = raw if isinstance(raw, dict) else {}
+        score = nvd.get("cvss")
+        affected = (
+            [
+                a.value
+                for a in index.neighbours(
+                    node_id(cve.type, cve.value), RelationType.HAS_VULNERABILITY, incoming=True
+                )
+            ]
+            if with_affected
+            else []
+        )
+        rows.append(
+            CveRow(
+                id=cve.value,
+                cvss=float(score) if isinstance(score, int | float) else None,
+                severity=str(nvd.get("severity") or "sin puntuación"),
+                kev=nvd.get("kev") is True,
+                published=str(nvd.get("published") or ""),
+                summary=str(nvd.get("summary") or ""),
+                link=bool(CVE_ID.match(cve.value)),
+                affected=affected,
+            )
+        )
+    rows.sort(key=lambda c: (not c.kev, -(c.cvss or 0), c.id))
+    return rows
 
 
 def mail(store: Store, scan: Scan) -> dict[str, object]:

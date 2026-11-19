@@ -18,6 +18,8 @@ class EntityType(StrEnum):
     PORT = "port"
     CERTIFICATE = "certificate"
     CANDIDATE = "candidate"
+    TECHNOLOGY = "technology"
+    CVE = "cve"
 
 
 class RelationType(StrEnum):
@@ -29,6 +31,8 @@ class RelationType(StrEnum):
     HAS_CERTIFICATE = "has_certificate"
     ARCHIVED_URL = "archived_url"
     CNAME_TO = "cname_to"
+    USES_TECHNOLOGY = "uses_technology"
+    HAS_VULNERABILITY = "has_vulnerability"
 
 
 class Contact(StrEnum):

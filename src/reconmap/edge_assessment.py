@@ -126,6 +126,21 @@ COOKIE_PREFIXES = {
 
 NS_SUFFIXES = {".ns.cloudflare.com": CLOUDFLARE}
 
+# Cabeceras propias de cada proveedor. `headers` guarda solo si aparecen, nunca su valor.
+EDGE_HEADERS = {
+    "cf-ray": CLOUDFLARE,
+    "cf-cache-status": CLOUDFLARE,
+    "x-iinfo": IMPERVA,
+    "akamai-grn": AKAMAI,
+    "x-akamai-transformed": AKAMAI,
+    "x-sucuri-id": SUCURI,
+    "x-sucuri-cache": SUCURI,
+    "x-amz-cf-id": CLOUDFRONT,
+    "x-amz-cf-pop": CLOUDFRONT,
+    "x-azure-ref": FRONT_DOOR,
+    "x-fastly-request-id": FASTLY,
+}
+
 
 @dataclass(frozen=True)
 class IpInfo:
@@ -259,6 +274,8 @@ def assess_edge(
     for server in _server_headers(http_headers):
         if provider_name := SERVER_HEADERS.get(server.lower()):
             add(provider_name, "header", f"Cabecera server: {server}")
+    for header in _edge_header_names(http_headers):
+        add(EDGE_HEADERS[header], "header", f"Cabecera {header}")
     for cookie in _cookie_names(http_headers):
         for prefix, provider_name in COOKIE_PREFIXES.items():
             if cookie.startswith(prefix):
@@ -336,6 +353,15 @@ def _server_headers(http_headers: object) -> list[str]:
         if isinstance(headers, dict) and isinstance(server := headers.get("server"), str):
             values.append(server.strip())
     return sorted(set(values))
+
+
+def _edge_header_names(http_headers: object) -> list[str]:
+    names = []
+    for response in _responses(http_headers):
+        present = response.get("edge_headers")
+        if isinstance(present, list):
+            names += [str(n) for n in present if str(n) in EDGE_HEADERS]
+    return sorted(set(names))
 
 
 def _cookie_names(http_headers: object) -> list[str]:

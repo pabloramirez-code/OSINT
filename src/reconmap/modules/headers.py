@@ -4,10 +4,12 @@ from datetime import timedelta
 import httpx
 
 from reconmap.config import HTTP_TIMEOUT_SECONDS, USER_AGENT
-from reconmap.models import Contact, Entity, EntityType, ModuleResult
+from reconmap.edge_assessment import EDGE_HEADERS
+from reconmap.models import Contact, Entity, EntityType, ModuleResult, Relation, RelationType
 from reconmap.modules.base import Context, ModuleError
 from reconmap.modules.dns import Resolve, make_resolver
 from reconmap.modules.mail import dns_query
+from reconmap.technologies import TECH_HEADERS, from_http_headers
 
 SECURITY_HEADERS = (
     "strict-transport-security",
@@ -31,7 +33,10 @@ class Headers:
 
     name = "headers"
     label = "Cabeceras HTTP"
-    description = "Cabeceras de seguridad, paso de HTTP a HTTPS, certificado y cookies de cada web"
+    description = (
+        "Cabeceras de seguridad, paso de HTTP a HTTPS, certificado, cookies, tecnologías "
+        "y proveedor de CDN/WAF de cada web"
+    )
     accepts = frozenset({EntityType.DOMAIN, EntityType.SUBDOMAIN})
     contact = Contact.LIGHT
     requires_key: str | None = None
@@ -54,10 +59,14 @@ class Headers:
                 return await self._collect(entity.value, ctx)
 
             data = await ctx.cached(self, entity.value, collect)
+        host = Entity(type=entity.type, value=entity.value, attributes={"http_headers": data})
+        technologies = [tech.entity() for tech in from_http_headers(data)]
         return ModuleResult(
-            entities=[
-                Entity(type=entity.type, value=entity.value, attributes={"http_headers": data})
-            ]
+            entities=[host, *technologies],
+            relations=[
+                Relation(from_ref=host.ref, type=RelationType.USES_TECHNOLOGY, to_ref=t.ref)
+                for t in technologies
+            ],
         )
 
     async def _resolves(self, host: str, ctx: Context) -> bool:
@@ -108,9 +117,10 @@ async def _head_of_response(client: httpx.AsyncClient, url: str) -> dict[str, ob
             "location": response.headers.get("location"),
             "headers": {
                 name: response.headers[name][:MAX_HEADER_LENGTH]
-                for name in SECURITY_HEADERS
+                for name in (*SECURITY_HEADERS, *TECH_HEADERS)
                 if name in response.headers
             },
+            "edge_headers": sorted(name for name in EDGE_HEADERS if name in response.headers),
             "cookies": cookie_flags(response.headers.get_list("set-cookie")),
         }
 

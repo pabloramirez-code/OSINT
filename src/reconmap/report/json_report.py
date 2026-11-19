@@ -16,7 +16,7 @@ from enum import StrEnum
 
 from reconmap.checks import Check, Status
 from reconmap.edge_assessment import ip_provider
-from reconmap.insights import SENSITIVE_PATHS, ScanIndex, edge_overview, node_id
+from reconmap.insights import SENSITIVE_PATHS, ScanIndex, edge_overview, node_id, short_label
 from reconmap.mail_assessment import assess
 from reconmap.models import Entity, EntityType, RelationType, Scan
 from reconmap.store import Store
@@ -113,6 +113,17 @@ class _ScanView:
                 "columns": ["ip", "asn", "provider", "ports", "cves", "tags", "hosts"],
                 "rows": [self._ip_row(ip) for ip in self.by_type[EntityType.IP]],
             },
+            "technologies": {
+                "columns": ["technology", "cpe", "seen_on", "cves", "max_cvss", "kev"],
+                "rows": [self._tech_row(t) for t in self.by_type[EntityType.TECHNOLOGY]],
+            },
+            "cves": {
+                "note": "Reportadas para la versión detectada, no confirmadas. Se listan las "
+                "de CVSS >= 7 o en KEV; el resto solo cuenta en el total.",
+                "total": len(self.by_type[EntityType.CVE]),
+                "columns": ["id", "cvss", "severity", "kev", "published", "affects", "summary"],
+                "rows": [self._cve_row(c) for c in self._relevant_cves()],
+            },
             "certificates": self._certificates(),
             "wayback": {
                 "total": len(self.by_type[EntityType.URL]),
@@ -136,6 +147,12 @@ class _ScanView:
                 "top_fail": groups[Status.FAIL][:MAX_SUMMARY_GROUPS],
                 "top_warn": groups[Status.WARN][:MAX_SUMMARY_GROUPS],
             },
+            "technologies": [
+                short_label(t)
+                for t in self.by_type[EntityType.TECHNOLOGY]
+                if t.attributes.get("version")
+            ],
+            "cves": self._cve_summary(),
             "certificates_attention": sum(
                 1
                 for checks in self.host_problems.values()
@@ -268,6 +285,56 @@ class _ScanView:
             "outside_proxy": overview.outside,
         }
 
+    def _tech_row(self, tech: Entity) -> list[object]:
+        nid = node_id(tech.type, tech.value)
+        cves = self.index.neighbours(nid, RelationType.HAS_VULNERABILITY)
+        scores = [s for c in cves if (s := _cvss(c)) is not None]
+        users = self.index.neighbours(nid, RelationType.USES_TECHNOLOGY, incoming=True)
+        return [
+            _clean(short_label(tech)),
+            str(tech.attributes.get("cpe") or ""),
+            ", ".join(u.value for u in users),
+            len(cves),
+            max(scores) if scores else None,
+            sum(_kev(c) for c in cves),
+        ]
+
+    def _relevant_cves(self) -> list[Entity]:
+        cves = [c for c in self.by_type[EntityType.CVE] if _kev(c) or (_cvss(c) or 0) >= 7]
+        return sorted(cves, key=lambda c: (not _kev(c), -(_cvss(c) or 0), c.value))
+
+    def _affects(self, cve: Entity) -> list[str]:
+        nid = node_id(cve.type, cve.value)
+        return [
+            short_label(a)
+            for a in self.index.neighbours(nid, RelationType.HAS_VULNERABILITY, incoming=True)
+        ]
+
+    def _cve_row(self, cve: Entity) -> list[object]:
+        nvd = _nvd(cve)
+        return [
+            cve.value,
+            _cvss(cve),
+            nvd.get("severity"),
+            _kev(cve),
+            nvd.get("published"),
+            ", ".join(self._affects(cve)),
+            _clean(str(nvd.get("summary") or ""), 160),
+        ]
+
+    def _cve_summary(self) -> dict[str, object]:
+        cves = self.by_type[EntityType.CVE]
+        severities = Counter(str(_nvd(c).get("severity") or "sin puntuación") for c in cves)
+        return {
+            "total": len(cves),
+            "kev": sum(_kev(c) for c in cves),
+            "by_severity": dict(severities.most_common()),
+            "top": [
+                [c.value, _cvss(c), _kev(c), ", ".join(self._affects(c))]
+                for c in self._relevant_cves()[:10]
+            ],
+        }
+
     def _certificates(self) -> dict[str, object]:
         certificates = self.by_type[EntityType.CERTIFICATE]
         issuers = Counter(_issuer_name(c) for c in certificates)
@@ -336,6 +403,20 @@ class _ScanView:
     def _ports_of(self, ip: Entity) -> list[int]:
         ports = self.index.neighbours(node_id(ip.type, ip.value), RelationType.EXPOSES_PORT)
         return sorted(int(p.value.rsplit(":", 1)[1]) for p in ports)
+
+
+def _nvd(cve: Entity) -> dict[str, object]:
+    raw = cve.attributes.get("nvd")
+    return raw if isinstance(raw, dict) else {}
+
+
+def _cvss(cve: Entity) -> float | None:
+    score = _nvd(cve).get("cvss")
+    return float(score) if isinstance(score, int | float) else None
+
+
+def _kev(cve: Entity) -> bool:
+    return _nvd(cve).get("kev") is True
 
 
 def _problem_text(check: Check) -> str:

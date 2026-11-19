@@ -48,6 +48,8 @@ RELATION_LABELS = {
     RelationType.HAS_CERTIFICATE: "certificado",
     RelationType.ARCHIVED_URL: "URL archivada",
     RelationType.CNAME_TO: "alias de",
+    RelationType.USES_TECHNOLOGY: "tecnología",
+    RelationType.HAS_VULNERABILITY: "CVE",
 }
 TYPE_LABELS = {
     EntityType.DOMAIN: "Dominio",
@@ -59,6 +61,8 @@ TYPE_LABELS = {
     EntityType.CERTIFICATE: "Certificado",
     EntityType.URL: "URL archivada",
     EntityType.CANDIDATE: "Candidato",
+    EntityType.TECHNOLOGY: "Tecnología",
+    EntityType.CVE: "CVE",
 }
 MAX_RELATED = 40
 MAX_SHORT_LABEL = 30
@@ -69,9 +73,16 @@ RELATED_ORDER = [
     RelationType.BELONGS_TO_ASN,
     RelationType.OWNED_BY,
     RelationType.EXPOSES_PORT,
+    RelationType.USES_TECHNOLOGY,
+    RelationType.HAS_VULNERABILITY,
     RelationType.HAS_CERTIFICATE,
     RelationType.ARCHIVED_URL,
 ]
+CVE_ADVICE = (
+    "Reportada para la versión detectada, no confirmada: comprueba la versión real y si la "
+    "distribución (Ubuntu, Debian…) ya aplicó el parche sin cambiar el número de versión."
+)
+HIGH_CVSS = 7.0
 
 
 @dataclass(frozen=True)
@@ -142,6 +153,8 @@ class ScanIndex:
             EntityType.PORT: self._port,
             EntityType.CERTIFICATE: self._certificate,
             EntityType.URL: self._url,
+            EntityType.TECHNOLOGY: self._technology,
+            EntityType.CVE: self._cve,
         }.get(entity.type, self._generic)
         problems, info = builder(nid, entity)
         info.append(("Fuentes", ", ".join(sorted(entity.sources)) or "—"))
@@ -248,6 +261,7 @@ class ScanIndex:
                     "IP de una CDN: los puertos son de la CDN, no necesariamente del servidor real",
                 )
             )
+        problems += self._technology_problems_through(nid)
         if not any(c.status in {Status.FAIL, Status.WARN} for c in problems):
             problems.insert(0, Check("IP", Status.OK, "Sin servicios sensibles ni CVEs conocidas"))
 
@@ -266,6 +280,7 @@ class ScanIndex:
             ("Hosts que apuntan aquí", ", ".join(h.value for h in hosts) or "—"),
             ("Puertos abiertos", ", ".join(map(str, ports)) or "ninguno conocido"),
             ("Etiquetas", ", ".join(tags) or "—"),
+            ("Tecnologías", self._technology_labels(nid)),
         ]
         others = [
             h for h in _strings(ip.attributes.get("hostnames")) if h not in {e.value for e in hosts}
@@ -288,6 +303,8 @@ class ScanIndex:
             )
         problems += self._certificate_problems(nid, resolves=bool(ips))
         problems += self._ip_problems_through(ips)
+        seen = {c.summary for c in problems}
+        problems += [c for c in self._technology_problems_through(nid) if c.summary not in seen]
 
         headers = attrs.get("http_headers")
         if isinstance(headers, dict):
@@ -335,6 +352,7 @@ class ScanIndex:
         raw_dns = attrs.get("dns")
         dns_records = raw_dns if isinstance(raw_dns, dict) else {}
         info = [("IPs", ", ".join(i.value for i in ips) or "—")]
+        info.append(("Tecnologías", self._technology_labels(nid)))
         if edge is not None:
             info.append(("Proveedor de la IP", ", ".join(edge.ip_providers) or "desconocido"))
             info.append(("WAF", edge.label))
@@ -397,6 +415,104 @@ class ScanIndex:
                 )
             )
         return problems, [("URL", url.value)]
+
+    def _technology(self, nid: str, tech: Entity) -> tuple[list[Check], list[tuple[str, str]]]:
+        attrs = tech.attributes
+        cves = self.neighbours(nid, RelationType.HAS_VULNERABILITY)
+        scores = [s for c in cves if (s := _cvss(c)) is not None]
+        kev = [c for c in cves if _kev(c)]
+        high = [c for c in cves if (_cvss(c) or 0) >= HIGH_CVSS]
+        name = short_label(tech)
+        problems: list[Check] = []
+        if kev:
+            problems.append(
+                Check(
+                    "CVE",
+                    Status.FAIL,
+                    f"{name}: {len(kev)} CVE en el catálogo KEV de CISA (explotadas activamente)",
+                    CVE_ADVICE,
+                )
+            )
+        if high:
+            problems.append(
+                Check(
+                    "CVE",
+                    Status.WARN,
+                    f"{name}: {len(high)} CVE reportadas con CVSS ≥ 7 (máx. {max(scores):.1f})",
+                    CVE_ADVICE,
+                )
+            )
+        lookup = attrs.get("cve_lookup")
+        if not attrs.get("version"):
+            problems.append(Check("CVE", Status.INFO, "Sin versión: no se buscan CVEs"))
+        elif lookup and lookup != "hecho":
+            problems.append(Check("CVE", Status.INFO, f"CVEs {lookup}"))
+        elif cves and not problems:
+            problems.append(
+                Check("CVE", Status.INFO, f"{len(cves)} CVE reportadas de gravedad baja o media")
+            )
+        elif not cves and lookup == "hecho":
+            problems.append(Check("CVE", Status.OK, "Sin CVEs publicadas en NVD para esta versión"))
+        users = self.neighbours(nid, RelationType.USES_TECHNOLOGY, incoming=True)
+        severities: dict[str, int] = defaultdict(int)
+        for cve in cves:
+            severities[_severity(cve)] += 1
+        return problems, [
+            ("Producto", str(attrs.get("name") or tech.value)),
+            ("Versión", str(attrs.get("version") or "desconocida")),
+            ("CPE", str(attrs.get("cpe") or "—")),
+            ("Visto en", ", ".join(u.value for u in users[:15]) or "—"),
+            (
+                "CVEs",
+                ", ".join(f"{n} {sev}" for sev, n in sorted(severities.items())) or "ninguna",
+            ),
+        ]
+
+    def _cve(self, nid: str, cve: Entity) -> tuple[list[Check], list[tuple[str, str]]]:
+        nvd = cve.attributes.get("nvd")
+        data = nvd if isinstance(nvd, dict) else {}
+        score = _cvss(cve)
+        if _kev(cve):
+            check = Check(
+                "KEV", Status.FAIL, "En el catálogo KEV de CISA: explotada activamente", CVE_ADVICE
+            )
+        elif score is not None and score >= HIGH_CVSS:
+            check = Check("CVE", Status.WARN, f"CVSS {score:.1f} ({_severity(cve)})", CVE_ADVICE)
+        else:
+            text = f"CVSS {score:.1f}" if score is not None else "Sin puntuación de NVD"
+            check = Check("CVE", Status.INFO, text, CVE_ADVICE)
+        affected = self.neighbours(nid, RelationType.HAS_VULNERABILITY, incoming=True)
+        sources = []
+        if cve.attributes.get("internetdb"):
+            sources.append("Shodan InternetDB (por IP)")
+        if data:
+            sources.append("NVD (por versión de la tecnología)")
+        version = data.get("cvss_version") or "?"
+        return [check], [
+            ("CVSS", f"{score:.1f} (v{version})" if score is not None else "—"),
+            ("Gravedad", _severity(cve)),
+            ("Publicada", str(data.get("published") or "—")),
+            ("Resumen", str(data.get("summary") or "—")),
+            ("Afecta a", ", ".join(short_label(a) for a in affected[:15]) or "—"),
+            ("Reportada por", ", ".join(sources) or "—"),
+            ("Ficha", f"https://nvd.nist.gov/vuln/detail/{cve.value}"),
+        ]
+
+    def _technologies_of(self, nid: str) -> list[Entity]:
+        return self.neighbours(nid, RelationType.USES_TECHNOLOGY)
+
+    def _technology_labels(self, nid: str) -> str:
+        return ", ".join(short_label(t) for t in self._technologies_of(nid)) or "—"
+
+    def _technology_problems_through(self, nid: str) -> list[Check]:
+        problems = []
+        for tech in self._technologies_of(nid):
+            tech_insights = self.insights(node_id(tech.type, tech.value))
+            if tech_insights is not None:
+                problems += [
+                    c for c in tech_insights.problems if c.status in {Status.FAIL, Status.WARN}
+                ]
+        return problems
 
     def _generic(self, nid: str, entity: Entity) -> tuple[list[Check], list[tuple[str, str]]]:
         info = [(key, _text(value)) for key, value in sorted(entity.attributes.items())]
@@ -522,6 +638,10 @@ def short_label(entity: Entity) -> str:
         text = entity.value.rsplit(":", 1)[-1]
     elif entity.type is EntityType.CERTIFICATE:
         text = f"cert. {str(entity.attributes.get('not_after', ''))[:10]}".strip()
+    elif entity.type is EntityType.TECHNOLOGY:
+        name = str(entity.attributes.get("name") or entity.value)
+        version = entity.attributes.get("version")
+        text = f"{name} {version}" if version else name
     else:
         text = entity.value
     return text if len(text) <= MAX_SHORT_LABEL else text[: MAX_SHORT_LABEL - 1] + "…"
@@ -581,6 +701,23 @@ def _parse_date(value: object) -> datetime | None:
     except ValueError:
         return None
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _cvss(cve: Entity) -> float | None:
+    nvd = cve.attributes.get("nvd")
+    score = nvd.get("cvss") if isinstance(nvd, dict) else None
+    return float(score) if isinstance(score, int | float) else None
+
+
+def _kev(cve: Entity) -> bool:
+    nvd = cve.attributes.get("nvd")
+    return isinstance(nvd, dict) and nvd.get("kev") is True
+
+
+def _severity(cve: Entity) -> str:
+    nvd = cve.attributes.get("nvd")
+    severity = nvd.get("severity") if isinstance(nvd, dict) else None
+    return str(severity) if severity else "sin puntuación"
 
 
 def _strings(value: object) -> list[str]:

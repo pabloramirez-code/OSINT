@@ -590,3 +590,9 @@ details summary { cursor: pointer; color: var(--accent); }
 .report-levels li { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .report-levels .button { min-width: 8.5rem; text-align: center; }
 .report-levels span { color: var(--muted, #6b7280); flex: 1 1 16rem; }
+
+/* Pestaña Tecnologías */
+.tag-danger { background: var(--danger-soft, #fde8e8); color: var(--danger); }
+.cve-table { margin-top: 8px; font-size: 13px; }
+.cve-table td:last-child { min-width: 18rem; }
+details > summary { cursor: pointer; }

@@ -1,0 +1,82 @@
+{% extends "partials/tabs.html" %}
+{% set active = "tech" %}
+
+{% macro cve_list(cves, with_affected=false) %}
+  <table class="data-table cve-table">
+    <thead>
+      <tr><th>CVE</th><th>CVSS</th><th>Publicada</th>{% if with_affected %}<th>IPs</th>{% endif %}<th>Resumen</th></tr>
+    </thead>
+    <tbody>
+      {% for cve in cves %}
+        <tr>
+          <td class="nowrap">
+            {% if cve.link %}<a href="https://nvd.nist.gov/vuln/detail/{{ cve.id }}" target="_blank" rel="noopener noreferrer"><code>{{ cve.id }}</code></a>{% else %}<code>{{ cve.id }}</code>{% endif %}
+            {% if cve.kev %}<span class="tag tag-danger" title="Catálogo KEV de CISA: explotada activamente">KEV</span>{% endif %}
+          </td>
+          <td class="nowrap">
+            {% if cve.cvss is not none %}<span class="tag {{ 'tag-danger' if cve.cvss >= 9 else 'tag-warning' if cve.cvss >= 7 else '' }}">{{ "%.1f"|format(cve.cvss) }} {{ cve.severity }}</span>{% else %}—{% endif %}
+          </td>
+          <td class="nowrap">{{ cve.published or "—" }}</td>
+          {% if with_affected %}<td><div class="cell-list">{% for ip in cve.affected %}<code>{{ ip }}</code>{% endfor %}</div></td>{% endif %}
+          <td>{{ cve.summary or "Sin datos de NVD: abre la ficha para verla." }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endmacro %}
+
+{% block tab %}
+<p class="notice">Las CVEs son <strong>reportadas para la versión detectada, no confirmadas</strong>: una distribución (Ubuntu, Debian…) puede haber corregido el fallo sin cambiar el número de versión. Comprueba siempre la versión real y los parches aplicados.</p>
+
+{% if rows %}
+  <input type="search" class="table-filter" placeholder="Filtrar tecnologías, versiones, hosts…" data-filter="#tech-table">
+  <div class="table-wrap">
+    <table id="tech-table" class="data-table">
+      <thead>
+        <tr>
+          <th data-sort>Tecnología</th>
+          <th data-sort>Visto en</th>
+          <th data-sort>CVEs</th>
+          <th data-sort>Máx. CVSS</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>
+              <div class="cell-list">
+                <strong>{{ row.label }}</strong>
+                {% if row.cpe %}<code class="muted">{{ row.cpe }}</code>{% endif %}
+              </div>
+            </td>
+            <td><div class="cell-list">{% for host in row.seen_on[:8] %}<code>{{ host }}</code>{% endfor %}{% if row.seen_on|length > 8 %}<span class="muted">y {{ row.seen_on|length - 8 }} más</span>{% endif %}</div></td>
+            <td>
+              {% if row.cves %}
+                <details>
+                  <summary>{{ row.cves|length }} CVE{% if row.kev %} · <span class="tag tag-danger">{{ row.kev }} KEV</span>{% endif %}</summary>
+                  {{ cve_list(row.cves) }}
+                </details>
+              {% else %}
+                <span class="muted">{{ "ninguna publicada" if row.lookup == "hecho" else row.lookup }}</span>
+              {% endif %}
+            </td>
+            <td class="nowrap">{% if row.max_cvss is not none %}{{ "%.1f"|format(row.max_cvss) }}{% else %}—{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="muted">No se han detectado tecnologías. Salen de los CPE de Shodan InternetDB (por IP) y, en modo Ligero, de las cabeceras <code>server</code>/<code>x-powered-by</code> y las cookies.</p>
+{% endif %}
+
+{% if ip_cves %}
+  <section class="panel">
+    <h3>CVEs reportadas por Shodan InternetDB para las IPs</h3>
+    <p class="muted">InternetDB las asocia a la IP, no a una tecnología concreta. Sin datos de NVD solo se muestra el identificador.</p>
+    <div class="table-wrap">{{ cve_list(ip_cves, with_affected=true) }}</div>
+  </section>
+{% endif %}
+
+<p class="muted">Sin leer el HTML de las páginas: tecnologías de los CPE de Shodan InternetDB y de las cabeceras y cookies (modo Ligero). Las CVEs solo se buscan cuando hay versión exacta. This product uses the NVD API but is not endorsed or certified by the NVD.</p>
+{% endblock %}

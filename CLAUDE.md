@@ -107,11 +107,12 @@ vectores de ataque. **Observa y marca.**
 
 ```
 Entity: type ∈ {domain, subdomain, ip, asn, org, url, port, certificate,
-               candidate}
+               candidate, technology, cve}
         value (normalizado), first_seen, last_seen, sources[]
 Relation: (from) --type--> (to), source, observed_at
           type ∈ {has_subdomain, resolves_to, belongs_to_asn, owned_by,
-                  exposes_port, has_certificate, archived_url, cname_to}
+                  exposes_port, has_certificate, archived_url, cname_to,
+                  uses_technology, has_vulnerability}
 Finding: rule_id, severity ∈ {info, low, medium, high}, entity,
          title, evidence (fuente + dato bruto), created_at
 Scan:    id, target, depth, allow_light, status ∈ {pending, running, done, failed},
@@ -695,8 +696,30 @@ Sin `uv` en el PATH (Windows, PowerShell, desde la raíz del proyecto):
     recortada). En el dominio de prueba no cambia el resultado (las IPs de CloudFront ya
     se detectaban por la etiqueta `cdn`), pero cubre IPv6, donde InternetDB no
     llega. Las señales se agrupan por IP ("5 IPs (…): …").
-  - Siguiente: paso 4, cabeceras de proveedor en `headers` (modo Ligero).
-    Censys aplazado por el usuario.
+  - Paso 4 hecho: `headers` guarda la presencia (nunca el valor) de cabeceras
+    de proveedor (`cf-ray`, `x-iinfo`, `x-amz-cf-id`…; tabla `EDGE_HEADERS`).
+  - Censys aplazado por el usuario.
+- Tecnologías y CVEs (2026-11-19, pedido por el usuario). Decisión del usuario:
+  **sin leer el HTML** (regla 1 sin cambios). `technologies.py` (puro) saca
+  tecnologías de los CPE de InternetDB (pasivo) y, en modo Ligero, de las
+  cabeceras `server`, `x-powered-by`, `x-aspnet-version`, `x-aspnetmvc-version`,
+  `x-generator`, `x-redirect-by` y nombres de cookie. Productos desconocidos se
+  ignoran. Entidades `technology` (valor `vendor:product:versión`) y `cve`;
+  relaciones `uses_technology` (host/IP → tecnología) y `has_vulnerability`
+  (tecnología/IP → CVE). InternetDB: sus `vulns` también son entidades `cve`.
+  - `modules/nvd.py` (`passive`): NVD API 2.0 con `cpeName` (incluye rangos de
+    versión). **Solo con versión exacta.** nginx está en NVD como `f5:nginx`
+    (`nginx:nginx` devuelve 0). Sin clave 5 consultas/30 s (`NVD_API_KEY`
+    opcional, 50/30 s); tope `RECONMAP_MAX_CVE_LOOKUPS` (20). Cada respuesta
+    puede pesar 650 KB y tardar 25 s: `Context.get_json(reduce=…)` guarda en
+    caché solo lo que se usa. Descarta CVEs `Rejected`. Un módulo puede
+    declarar `timeout` propio (NVD: 900 s).
+  - El motor reencola `technology` a la misma profundidad (no es un salto).
+  - Lenguaje: "reportada para la versión detectada, no confirmada" (backports
+    de las distribuciones). KEV de CISA → `fail`; CVSS ≥ 7 → `warn`.
+  - Pestaña **Tecnologías**, nodos en el grafo (CVEs agrupables si hay más de
+    300 nodos), problemas que suben a la IP y al host, bloques `technologies` y
+    `cves` en los informes. Aviso de NVD ("not endorsed or certified").
 - Notas:
   - `normalize_domain` devuelve `Domain(name, wildcard)` (NamedTuple).
   - IDNA con el códec estándar de Python (IDNA 2003), sin dependencia extra.

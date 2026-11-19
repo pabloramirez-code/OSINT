@@ -6,6 +6,7 @@ from reconmap.models import Contact, Entity, EntityType, ModuleResult, Relation,
 from reconmap.modules.base import Context, ModuleError
 from reconmap.normalize import InvalidDomainError, normalize_domain
 from reconmap.scope import in_scope
+from reconmap.technologies import from_cpe, without_redundant
 
 
 class InternetDbHost(BaseModel):
@@ -62,6 +63,18 @@ def parse_internetdb(ip: str, target: str, data: object) -> ModuleResult:
         entities.append(exposed)
         relations.append(
             Relation(from_ref=address.ref, type=RelationType.EXPOSES_PORT, to_ref=exposed.ref)
+        )
+    for tech in without_redundant([t for cpe in host.cpes if (t := from_cpe(cpe))]):
+        found = tech.entity()
+        entities.append(found)
+        relations.append(
+            Relation(from_ref=address.ref, type=RelationType.USES_TECHNOLOGY, to_ref=found.ref)
+        )
+    for cve_id in sorted(host.vulns):
+        cve = Entity(type=EntityType.CVE, value=cve_id.upper(), attributes={"internetdb": True})
+        entities.append(cve)
+        relations.append(
+            Relation(from_ref=address.ref, type=RelationType.HAS_VULNERABILITY, to_ref=cve.ref)
         )
     for hostname in in_scope_hostnames(host.hostnames, target):
         sub = Entity(type=EntityType.SUBDOMAIN, value=hostname)
